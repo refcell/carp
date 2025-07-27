@@ -31,13 +31,13 @@ impl ApiClient {
     pub async fn search(&self, query: &str, limit: Option<usize>, exact: bool) -> CarpResult<SearchResponse> {
         let url = format!("{}/api/v1/agents/search", self.base_url);
         let mut params = vec![("q", query)];
-        
+
         let limit_str;
         if let Some(limit) = limit {
             limit_str = limit.to_string();
             params.push(("limit", &limit_str));
         }
-        
+
         if exact {
             params.push(("exact", "true"));
         }
@@ -55,6 +55,8 @@ impl ApiClient {
     pub async fn get_agent_download(&self, name: &str, version: Option<&str>) -> CarpResult<AgentDownload> {
         let version = version.unwrap_or("latest");
         let url = format!("{}/api/v1/agents/{}/{}/download", self.base_url, name, version);
+
+        println!("Sending GET request to: {}", url);
 
         let response = self.client
             .get(&url)
@@ -174,7 +176,7 @@ mod tests {
 
         let client = ApiClient::new(&config).unwrap();
         let result = client.search("test", Some(10), false).await;
-        
+
         match &result {
             Ok(_) => (),
             Err(e) => println!("Test error: {:?}", e),

@@ -25,3 +25,8 @@ echo ""
 echo "4. Testing with CLI..."
 cd cli
 cargo run -- search test --limit 5
+
+# Send a request to the pull url
+PULL_URL=https://$DOMAIN/api/v1/agents/senior-code-reviewer/latest/download
+echo "5. Testing pull URL: $PULL_URL"
+curl -I $PULL_URL

@@ -58,8 +58,7 @@ async fn main() -> Result<(), Error> {
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     // Check for authorization header
     let headers = req.headers();
-    let auth_header = headers.get("authorization")
-        .and_then(|h| h.to_str().ok());
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
 
     if auth_header.is_none() || !auth_header.unwrap().starts_with("Bearer ") {
         let error = ApiError {
@@ -74,7 +73,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 
     let token = auth_header.unwrap().strip_prefix("Bearer ").unwrap();
-    
+
     // Validate token (simplified for now)
     if !validate_jwt_token(token).await {
         let error = ApiError {
@@ -89,7 +88,8 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 
     // Parse multipart form data
-    let content_type = headers.get("content-type")
+    let content_type = headers
+        .get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
 
@@ -154,7 +154,7 @@ async fn publish_agent(request: PublishRequest, token: &str) -> Result<Agent, St
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
-    
+
     if supabase_url.is_empty() || supabase_key.is_empty() {
         // Return mock success if no database configured
         return Ok(create_mock_published_agent(request));
@@ -165,7 +165,7 @@ async fn publish_agent(request: PublishRequest, token: &str) -> Result<Agent, St
     // 2. Store the package in Supabase Storage
     // 3. Create/update agent record in database
     // 4. Return the created agent
-    
+
     Ok(create_mock_published_agent(request))
 }
 

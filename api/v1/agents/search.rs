@@ -39,16 +39,17 @@ async fn main() -> Result<(), Error> {
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     // Extract query parameters for search functionality
     let query = req.uri().query().unwrap_or("");
-    let search_params: HashMap<String, String> =
-        url::form_urlencoded::parse(query.as_bytes())
-            .into_owned()
-            .collect();
+    let search_params: HashMap<String, String> = url::form_urlencoded::parse(query.as_bytes())
+        .into_owned()
+        .collect();
 
     let search_query = search_params.get("q").map(|s| s.as_str()).unwrap_or("");
-    let limit = search_params.get("limit")
+    let limit = search_params
+        .get("limit")
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(20);
-    let page = search_params.get("page")
+    let page = search_params
+        .get("page")
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(1);
     let exact = search_params.get("exact").is_some();
@@ -72,11 +73,16 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     Ok(response)
 }
 
-async fn search_agents_in_db(query: &str, limit: usize, page: usize, exact: bool) -> Result<Vec<Agent>, Error> {
+async fn search_agents_in_db(
+    query: &str,
+    limit: usize,
+    page: usize,
+    exact: bool,
+) -> Result<Vec<Agent>, Error> {
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
-    
+
     if supabase_url.is_empty() || supabase_key.is_empty() {
         // Return mock data if no database configured
         return Ok(create_mock_agents(query));
@@ -106,7 +112,9 @@ fn create_mock_agents(query: &str) -> Vec<Agent> {
                 updated_at: Utc::now() - chrono::Duration::days(5),
                 download_count: 1250,
                 tags: vec!["text".to_string(), "nlp".to_string()],
-                readme: Some("# Text Processor\n\nAdvanced text processing capabilities.".to_string()),
+                readme: Some(
+                    "# Text Processor\n\nAdvanced text processing capabilities.".to_string(),
+                ),
                 homepage: Some("https://example.com/text-processor".to_string()),
                 repository: Some("https://github.com/alice/text-processor".to_string()),
                 license: Some("MIT".to_string()),
@@ -124,25 +132,23 @@ fn create_mock_agents(query: &str) -> Vec<Agent> {
                 homepage: None,
                 repository: Some("https://github.com/bob/code-assistant".to_string()),
                 license: Some("Apache-2.0".to_string()),
-            }
+            },
         ]
     } else {
         // Return filtered results based on query
-        vec![
-            Agent {
-                name: format!("{}-agent", query),
-                version: "1.0.0".to_string(),
-                description: format!("Agent for {}", query),
-                author: "community".to_string(),
-                created_at: Utc::now() - chrono::Duration::days(7),
-                updated_at: Utc::now() - chrono::Duration::days(1),
-                download_count: 42,
-                tags: vec![query.to_string()],
-                readme: None,
-                homepage: None,
-                repository: None,
-                license: Some("MIT".to_string()),
-            }
-        ]
+        vec![Agent {
+            name: format!("{}-agent", query),
+            version: "1.0.0".to_string(),
+            description: format!("Agent for {}", query),
+            author: "community".to_string(),
+            created_at: Utc::now() - chrono::Duration::days(7),
+            updated_at: Utc::now() - chrono::Duration::days(1),
+            download_count: 42,
+            tags: vec![query.to_string()],
+            readme: None,
+            homepage: None,
+            repository: None,
+            license: Some("MIT".to_string()),
+        }]
     }
 }

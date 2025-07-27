@@ -52,7 +52,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 
     // For now, implement basic authentication (in production, use proper auth)
     let valid_credentials = authenticate_user(&auth_request.username, &auth_request.password).await;
-    
+
     if !valid_credentials {
         let error = ApiError {
             error: "unauthorized".to_string(),
@@ -69,10 +69,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     let token = generate_jwt_token(&auth_request.username)?;
     let expires_at = Utc::now() + chrono::Duration::hours(24);
 
-    let response = AuthResponse {
-        token,
-        expires_at,
-    };
+    let response = AuthResponse { token, expires_at };
 
     Ok(Response::builder()
         .status(200)
@@ -92,7 +89,7 @@ fn generate_jwt_token(username: &str) -> Result<String, Error> {
         "username": username,
         "exp": (Utc::now() + chrono::Duration::hours(24)).timestamp()
     });
-    
+
     // For now, return a simple base64 encoded token
     Ok(format!("jwt_{}", base64::encode(token_data.to_string())))
 }
