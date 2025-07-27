@@ -1,5 +1,23 @@
 {
+  "name": "carp-registry",
+  "version": "1.0.0",
+  "description": "Claude Agent Registry Portal",
+  "scripts": {
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel",
+    "logs": "vercel logs",
+    "env:add": "vercel env add",
+    "env:list": "vercel env ls"
+  },
   "dependencies": {
     "vite": "^7.0.6"
-  }
+  },
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/carp.git"
+  },
+  "license": "MIT"
 }

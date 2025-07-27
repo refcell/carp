@@ -1,6 +1,5 @@
 -- Fix the security issues with function search paths
-DROP FUNCTION public.update_updated_at_column();
-DROP FUNCTION public.handle_new_user();
+-- Use CREATE OR REPLACE instead of DROP to avoid dependency issues
 
 -- Recreate functions with proper security settings
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()

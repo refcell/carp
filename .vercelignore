@@ -1,0 +1,31 @@
+# Build artifacts
+target/
+*.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local development
+.env
+.env.local
+
+# Documentation
+docs/
+*.md
+
+# CLI tool (not needed for API deployment)
+cli/
+
+# Site (not needed for API deployment)  
+site/
+
+# Only deploy the API
+!api/
+!vercel.json

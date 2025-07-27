@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "serverless/Cargo.toml",
+      "use": "vercel-rust@4.0.0",
+      "config": {
+        "maxDuration": 30,
+        "binary": "vercel-handler"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/serverless"
+    },
+    {
+      "src": "/health",
+      "dest": "/serverless"
+    }
+  ],
+  "env": {
+    "RUST_LOG": "info"
+  }
+}
