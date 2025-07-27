@@ -3,6 +3,7 @@
 debug
 target
 
+dist
 bun.lock
 bun.lockb
 node_modules
