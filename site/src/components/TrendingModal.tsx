@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Agent } from '@/hooks/useAgents';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -11,10 +12,25 @@ interface TrendingModalProps {
   agent: Agent | null;
   open: boolean;
   onClose: () => void;
+  onViewIncrement?: (agentId: string) => void;
 }
 
-export function TrendingModal({ agent, open, onClose }: TrendingModalProps) {
+export function TrendingModal({ agent, open, onClose, onViewIncrement }: TrendingModalProps) {
   const { toast } = useToast();
+  const hasIncrementedRef = useRef(false);
+
+  // Track when modal opens and increment view count
+  useEffect(() => {
+    if (open && agent && onViewIncrement && !hasIncrementedRef.current) {
+      onViewIncrement(agent.id);
+      hasIncrementedRef.current = true;
+    }
+    
+    // Reset when modal closes
+    if (!open) {
+      hasIncrementedRef.current = false;
+    }
+  }, [open, agent, onViewIncrement]);
 
   if (!agent) return null;
 

@@ -92,18 +92,81 @@ export function useAgents() {
   };
 
   const incrementViewCount = async (agentId: string) => {
-    // We'll create this RPC function later
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('view_count')
-      .eq('id', agentId)
-      .single();
+    console.log(`🔍 Incrementing view count for agent: ${agentId}`);
     
-    if (agent) {
-      await supabase
-        .from('agents')
-        .update({ view_count: agent.view_count + 1 })
-        .eq('id', agentId);
+    // First update local state optimistically
+    setAgents(prevAgents => 
+      prevAgents.map(agent => 
+        agent.id === agentId 
+          ? { ...agent, view_count: agent.view_count + 1 }
+          : agent
+      )
+    );
+
+    // Then update the database using a more reliable approach
+    try {
+      console.log('📡 Updating database...');
+      
+      // Use PostgreSQL's atomic increment instead of read-then-write
+      const { data, error } = await supabase.rpc('increment_view_count', {
+        agent_id: agentId
+      });
+
+      if (error) {
+        console.error('❌ Database RPC error:', error);
+        throw error;
+      }
+
+      console.log('✅ Database updated successfully');
+      return data;
+    } catch (error) {
+      console.error('❌ Error incrementing view count:', error);
+      
+      // Fallback to manual update if RPC doesn't exist
+      try {
+        console.log('🔄 Trying fallback database update...');
+        
+        const { data: currentAgent, error: fetchError } = await supabase
+          .from('agents')
+          .select('view_count')
+          .eq('id', agentId)
+          .single();
+        
+        if (fetchError) {
+          console.error('❌ Error fetching current agent:', fetchError);
+          throw fetchError;
+        }
+
+        console.log(`📊 Current view count in DB: ${currentAgent.view_count}`);
+        
+        const { data: updatedAgent, error: updateError } = await supabase
+          .from('agents')
+          .update({ view_count: currentAgent.view_count + 1 })
+          .eq('id', agentId)
+          .select('view_count')
+          .single();
+        
+        if (updateError) {
+          console.error('❌ Error updating view count:', updateError);
+          throw updateError;
+        }
+
+        console.log(`✅ Fallback update successful, new count: ${updatedAgent.view_count}`);
+        return updatedAgent;
+        
+      } catch (fallbackError) {
+        console.error('❌ Fallback update also failed:', fallbackError);
+        
+        // Revert optimistic update on error
+        setAgents(prevAgents => 
+          prevAgents.map(agent => 
+            agent.id === agentId 
+              ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
+              : agent
+          )
+        );
+        throw fallbackError;
+      }
     }
   };
 

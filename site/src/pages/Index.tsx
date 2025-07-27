@@ -25,8 +25,7 @@ const Index = () => {
 
   const featuredAgent = trendingAgents[0];
 
-  const handleAgentClick = async (agent: Agent) => {
-    await incrementViewCount(agent.id);
+  const handleAgentClick = (agent: Agent) => {
     setSelectedAgent(agent);
     setShowTrendingModal(true);
   };
@@ -260,6 +259,7 @@ const Index = () => {
           setShowTrendingModal(false);
           setSelectedAgent(null);
         }}
+        onViewIncrement={incrementViewCount}
       />
     </div>
   );
