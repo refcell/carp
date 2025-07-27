@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -26,32 +26,42 @@ export function useAgents() {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
-  const fetchAgents = async (search?: string) => {
+  const fetchAgents = useCallback(async (search?: string) => {
     setLoading(true);
-    let query = supabase
-      .from('agents')
-      .select(`
-        *,
-        profiles (
-          github_username,
-          display_name,
-          avatar_url
-        )
-      `)
-      .eq('is_public', true)
-      .order('created_at', { ascending: false });
+    try {
+      let query = supabase
+        .from('agents')
+        .select(`
+          *,
+          profiles (
+            github_username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('is_public', true)
+        .order('created_at', { ascending: false });
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
-    }
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
+      }
 
-    const { data, error } = await query;
-    
-    if (!error && data) {
-      setAgents(data as unknown as Agent[]);
+      const { data, error } = await query;
+      
+      if (!error && data) {
+        setAgents(data as unknown as Agent[]);
+      } else if (error) {
+        console.error('Error fetching agents:', error);
+        setAgents([]);
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error);
+      setAgents([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, []);
 
   const fetchUserAgents = async () => {
     if (!user) return [];
@@ -86,7 +96,12 @@ export function useAgents() {
     
     const { data, error } = await supabase
       .from('agents')
-      .insert([{ ...agent, user_id: user.id }])
+      .insert([{ 
+        ...agent, 
+        user_id: user.id,
+        is_public: true, // Ensure agents are public by default
+        view_count: 0 // Initialize view count
+      }])
       .select()
       .single();
     
@@ -121,9 +136,44 @@ export function useAgents() {
     if (error) throw error;
   };
 
+  // Debounced search effect
   useEffect(() => {
-    fetchAgents(searchQuery);
-  }, [searchQuery]);
+    const timeoutId = setTimeout(() => {
+      fetchAgents(searchQuery);
+    }, searchQuery ? 300 : 0); // 300ms debounce for search, immediate for empty
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, fetchAgents]);
+
+  // Initial load and real-time subscription
+  useEffect(() => {
+    // Initial fetch
+    fetchAgents();
+
+    // Set up real-time subscription for new agents
+    const channel = supabase
+      .channel('agents_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agents',
+          filter: 'is_public=eq.true'
+        },
+        () => {
+          // Use a slight delay to ensure database consistency
+          setTimeout(() => {
+            fetchAgents(searchQuery);
+          }, 100);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchAgents, searchQuery]); // Include searchQuery to handle changes
 
   const trendingAgents = agents
     .sort((a, b) => b.view_count - a.view_count)
@@ -134,6 +184,10 @@ export function useAgents() {
   const topAgents = agents
     .sort((a, b) => b.view_count - a.view_count)
     .slice(0, 10);
+
+  const refreshAgents = useCallback(() => {
+    fetchAgents(searchQuery);
+  }, [fetchAgents, searchQuery]);
 
   return {
     agents,
@@ -148,6 +202,7 @@ export function useAgents() {
     incrementViewCount,
     createAgent,
     updateAgent,
-    deleteAgent
+    deleteAgent,
+    refreshAgents
   };
 }
