@@ -23,7 +23,7 @@ const AllAgents = () => {
 
     try {
       const result = await fetchAgentsPaginated(20, offset);
-      
+
       if (append) {
         setAgents(prevAgents => {
           // Prevent duplicates by filtering out agents that already exist
@@ -34,7 +34,7 @@ const AllAgents = () => {
       } else {
         setAgents(result.agents);
       }
-      
+
       setHasMore(result.hasMore);
     } catch (error) {
       console.error('Error loading agents:', error);
@@ -68,7 +68,7 @@ const AllAgents = () => {
       <section className="pt-16 pb-8">
         <div className="container mx-auto">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            <h1 className="text-4xl pb-2 md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               All Agents
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">

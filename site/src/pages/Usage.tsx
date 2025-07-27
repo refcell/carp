@@ -43,7 +43,7 @@ const Usage = () => {
       <section className="pt-16 pb-4">
         <div className="container mx-auto text-center">
           <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            <h1 className="text-4xl pb-2 md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               Usage Guide
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
