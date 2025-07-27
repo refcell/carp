@@ -30,7 +30,10 @@ impl AuthManager {
             Ok(auth_response) => {
                 ConfigManager::set_api_token(auth_response.token)?;
                 println!("{}", "Successfully logged in!".green().bold());
-                println!("Token expires: {}", auth_response.expires_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "Token expires: {}",
+                    auth_response.expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
                 Ok(())
             }
             Err(e) => {
@@ -57,10 +60,10 @@ impl AuthManager {
     pub async fn status() -> CarpResult<()> {
         if Self::check_auth().await? {
             println!("{}", "Authenticated".green().bold());
-            
+
             let config = ConfigManager::load()?;
             println!("Registry: {}", config.registry_url);
-            
+
             // Try to validate token by making a test request
             let client = ApiClient::new(&config)?;
             match client.search("", Some(1), false).await {

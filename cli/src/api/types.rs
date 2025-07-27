@@ -83,3 +83,15 @@ pub struct AuthResponse {
     pub token: String,
     pub expires_at: DateTime<Utc>,
 }
+
+/// Health check response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HealthResponse {
+    pub status: String,
+    pub service: String,
+    pub environment: String,
+    pub message: String,
+    pub agent_count: Option<i64>,
+    pub timestamp: String,
+    pub error: Option<String>,
+}

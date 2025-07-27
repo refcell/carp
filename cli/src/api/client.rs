@@ -28,7 +28,12 @@ impl ApiClient {
     }
 
     /// Search for agents in the registry
-    pub async fn search(&self, query: &str, limit: Option<usize>, exact: bool) -> CarpResult<SearchResponse> {
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+        exact: bool,
+    ) -> CarpResult<SearchResponse> {
         let url = format!("{}/api/v1/agents/search", self.base_url);
         let mut params = vec![("q", query)];
 
@@ -42,36 +47,33 @@ impl ApiClient {
             params.push(("exact", "true"));
         }
 
-        let response = self.client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await?;
+        let response = self.client.get(&url).query(&params).send().await?;
 
         self.handle_response(response).await
     }
 
     /// Get download information for a specific agent
-    pub async fn get_agent_download(&self, name: &str, version: Option<&str>) -> CarpResult<AgentDownload> {
+    pub async fn get_agent_download(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> CarpResult<AgentDownload> {
         let version = version.unwrap_or("latest");
-        let url = format!("{}/api/v1/agents/{}/{}/download", self.base_url, name, version);
+        let url = format!(
+            "{}/api/v1/agents/{}/{}/download",
+            self.base_url, name, version
+        );
 
         println!("Sending GET request to: {}", url);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await?;
+        let response = self.client.get(&url).send().await?;
 
         self.handle_response(response).await
     }
 
     /// Download agent content
     pub async fn download_agent(&self, download_url: &str) -> CarpResult<bytes::Bytes> {
-        let response = self.client
-            .get(download_url)
-            .send()
-            .await?;
+        let response = self.client.get(download_url).send().await?;
 
         if !response.status().is_success() {
             return Err(CarpError::Api {
@@ -85,20 +87,29 @@ impl ApiClient {
     }
 
     /// Publish an agent to the registry
-    pub async fn publish(&self, request: PublishRequest, content: Vec<u8>) -> CarpResult<PublishResponse> {
-        let token = self.api_token.as_ref()
-            .ok_or_else(|| CarpError::Auth("No API token configured. Please login first.".to_string()))?;
+    pub async fn publish(
+        &self,
+        request: PublishRequest,
+        content: Vec<u8>,
+    ) -> CarpResult<PublishResponse> {
+        let token = self.api_token.as_ref().ok_or_else(|| {
+            CarpError::Auth("No API token configured. Please login first.".to_string())
+        })?;
 
         let url = format!("{}/api/v1/agents/publish", self.base_url);
 
         // Create multipart form with metadata and content
         let form = reqwest::multipart::Form::new()
             .text("metadata", serde_json::to_string(&request)?)
-            .part("content", reqwest::multipart::Part::bytes(content)
-                .file_name("agent.zip")
-                .mime_str("application/zip")?);
+            .part(
+                "content",
+                reqwest::multipart::Part::bytes(content)
+                    .file_name("agent.zip")
+                    .mime_str("application/zip")?,
+            );
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {token}"))
             .multipart(form)
@@ -116,11 +127,16 @@ impl ApiClient {
             password: password.to_string(),
         };
 
-        let response = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&request).send().await?;
+
+        self.handle_response(response).await
+    }
+
+    /// Check the health status of the API
+    pub async fn health_check(&self) -> CarpResult<HealthResponse> {
+        let url = format!("{}/api/health", self.base_url);
+
+        let response = self.client.get(&url).send().await?;
 
         self.handle_response(response).await
     }
@@ -167,7 +183,8 @@ mod tests {
             default_output_dir: None,
         };
 
-        let _m = server.mock("GET", "/api/v1/agents/search")
+        let _m = server
+            .mock("GET", "/api/v1/agents/search")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"agents": [], "total": 0, "page": 1, "per_page": 10}"#)

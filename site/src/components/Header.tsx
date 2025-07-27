@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Github, LogOut, User, Plus } from 'lucide-react';
+import { Github, LogOut, User, Plus, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function Header() {
@@ -11,12 +11,20 @@ export function Header() {
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center">
-          <span className="font-semibold text-lg">Claude Agents</span>
-        </Link>
+        <div className="flex items-center space-x-6">
+          <Link to="/" className="flex items-center">
+            <span className="font-semibold text-lg">Claude Agents</span>
+          </Link>
+        </div>
 
         {user ? (
           <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/usage">
+                <BookOpen className="w-4 h-4 mr-2" />
+                Usage
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link to="/create">
                 <Plus className="w-4 h-4 mr-2" />
@@ -52,10 +60,18 @@ export function Header() {
             </DropdownMenu>
           </div>
         ) : (
-          <Button onClick={signInWithGitHub} size="sm">
-            <Github className="w-4 h-4 mr-2" />
-            Sign in with GitHub
-          </Button>
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/usage">
+                <BookOpen className="w-4 h-4 mr-2" />
+                Usage
+              </Link>
+            </Button>
+            <Button onClick={signInWithGitHub} size="sm">
+              <Github className="w-4 h-4 mr-2" />
+              Sign in with GitHub
+            </Button>
+          </div>
         )}
       </div>
     </header>

@@ -1,6 +1,5 @@
 /// Integration tests for the CLI tool
 /// These tests verify CLI functionality against mock API servers
-
 use mockito::{Mock, ServerGuard};
 use serde_json::json;
 use std::collections::HashMap;
@@ -421,7 +420,7 @@ async fn test_api_client_error_handling() {
 #[tokio::test]
 async fn test_api_client_timeout() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    
+
     // Create a config with very short timeout
     let config = carp_cli::config::Config {
         registry_url: "http://127.0.0.1:9999".to_string(), // Non-existent server
@@ -453,7 +452,7 @@ async fn test_config_validation() {
     use carp_cli::config::Config;
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    
+
     // Test valid config
     let valid_config = Config {
         registry_url: "https://api.example.com".to_string(),
@@ -515,7 +514,10 @@ async fn test_user_agent_header() {
     let _mock = ctx
         .mock_server
         .mock("GET", "/api/v1/agents/search")
-        .match_header("user-agent", mockito::Matcher::Regex(r"carp-cli/\d+\.\d+\.\d+".to_string()))
+        .match_header(
+            "user-agent",
+            mockito::Matcher::Regex(r"carp-cli/\d+\.\d+\.\d+".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(
@@ -540,7 +542,7 @@ async fn test_user_agent_header() {
 #[tokio::test]
 async fn test_ssl_verification() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    
+
     // Test with SSL verification disabled
     let config = carp_cli::config::Config {
         registry_url: "https://self-signed.badssl.com".to_string(),

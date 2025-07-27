@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import Index from "./pages/Index";
 import Create from "./pages/Create";
 import Profile from "./pages/Profile";
+import Usage from "./pages/Usage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/create" element={<Create />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/usage" element={<Usage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <ThemeToggle />

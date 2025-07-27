@@ -6,12 +6,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Execute the pull command
-pub async fn execute(agent: String, output: Option<String>, force: bool, verbose: bool) -> CarpResult<()> {
+pub async fn execute(
+    agent: String,
+    output: Option<String>,
+    force: bool,
+    verbose: bool,
+) -> CarpResult<()> {
     let (name, version) = parse_agent_spec(&agent)?;
 
     if verbose {
-        println!("Pulling agent '{}'{}...", name,
-                version.map(|v| format!(" version {}", v)).unwrap_or_default());
+        println!(
+            "Pulling agent '{}'{}...",
+            name,
+            version
+                .map(|v| format!(" version {}", v))
+                .unwrap_or_default()
+        );
     }
 
     let config = ConfigManager::load()?;
@@ -21,10 +31,10 @@ pub async fn execute(agent: String, output: Option<String>, force: bool, verbose
     let download_info = client.get_agent_download(&name, version).await?;
 
     if verbose {
-        println!("Found {} v{} ({} bytes)",
-                download_info.name,
-                download_info.version,
-                download_info.file_size);
+        println!(
+            "Found {} v{} ({} bytes)",
+            download_info.name, download_info.version, download_info.file_size
+        );
     }
 
     // Determine output directory
@@ -63,11 +73,13 @@ pub async fn execute(agent: String, output: Option<String>, force: bool, verbose
     }
     extract_agent(&content, &output_dir, &download_info.content_type)?;
 
-    println!("{} Successfully pulled {} v{} to {}",
-            "✓".green().bold(),
-            download_info.name.blue().bold(),
-            download_info.version,
-            output_dir.display().to_string().cyan());
+    println!(
+        "{} Successfully pulled {} v{} to {}",
+        "✓".green().bold(),
+        download_info.name.blue().bold(),
+        download_info.version,
+        output_dir.display().to_string().cyan()
+    );
 
     // Show usage instructions
     println!("\nTo use this agent:");
@@ -85,7 +97,7 @@ fn parse_agent_spec(spec: &str) -> CarpResult<(String, Option<&str>)> {
 
         if name.is_empty() || version.is_empty() {
             return Err(CarpError::InvalidAgent(
-                "Invalid agent specification. Use 'name' or 'name@version'.".to_string()
+                "Invalid agent specification. Use 'name' or 'name@version'.".to_string(),
             ));
         }
 
@@ -96,7 +108,11 @@ fn parse_agent_spec(spec: &str) -> CarpResult<(String, Option<&str>)> {
 }
 
 /// Determine the output directory for the agent
-fn determine_output_dir(name: &str, output: Option<String>, config: &crate::config::Config) -> CarpResult<PathBuf> {
+fn determine_output_dir(
+    name: &str,
+    output: Option<String>,
+    config: &crate::config::Config,
+) -> CarpResult<PathBuf> {
     if let Some(output_path) = output {
         return Ok(PathBuf::from(output_path));
     }
@@ -111,7 +127,7 @@ fn determine_output_dir(name: &str, output: Option<String>, config: &crate::conf
 
 /// Verify the checksum of downloaded content
 fn verify_checksum(content: &[u8], expected: &str) -> CarpResult<()> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
 
     // Parse expected checksum (remove "sha256-" prefix if present)
     let expected_hash = if expected.starts_with("sha256-") {
@@ -135,7 +151,6 @@ fn verify_checksum(content: &[u8], expected: &str) -> CarpResult<()> {
 
 /// Extract agent content to the specified directory
 fn extract_agent(content: &[u8], output_dir: &Path, content_type: &str) -> CarpResult<()> {
-
     // Create output directory
     fs::create_dir_all(output_dir)?;
 
@@ -144,7 +159,9 @@ fn extract_agent(content: &[u8], output_dir: &Path, content_type: &str) -> CarpR
         "application/gzip" | "application/x-gzip" => extract_gzip(content, output_dir),
         _ => {
             // Try to detect format by checking magic bytes
-            if content.starts_with(&[0x50, 0x4b, 0x03, 0x04]) || content.starts_with(&[0x50, 0x4b, 0x05, 0x06]) {
+            if content.starts_with(&[0x50, 0x4b, 0x03, 0x04])
+                || content.starts_with(&[0x50, 0x4b, 0x05, 0x06])
+            {
                 extract_zip(content, output_dir)
             } else if content.starts_with(&[0x1f, 0x8b]) {
                 extract_gzip(content, output_dir)
@@ -166,7 +183,8 @@ fn extract_zip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
         .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP archive: {e}")))?;
 
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i)
+        let mut file = archive
+            .by_index(i)
             .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP entry: {e}")))?;
 
         // Security: Validate file path to prevent directory traversal attacks
@@ -182,9 +200,10 @@ fn extract_zip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
         // Additional security: Ensure the resolved path is still within output_dir
         let canonical_output = output_dir.canonicalize()?;
         let canonical_file = file_path.canonicalize().unwrap_or_else(|_| {
-            file_path.parent().unwrap_or(output_dir).join(
-                file_path.file_name().unwrap_or_default()
-            )
+            file_path
+                .parent()
+                .unwrap_or(output_dir)
+                .join(file_path.file_name().unwrap_or_default())
         });
 
         if !canonical_file.starts_with(&canonical_output) {
@@ -219,18 +238,24 @@ fn extract_zip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
 
 /// Extract GZIP archive content (assumes it's a tar.gz)
 fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
-    use std::io::Cursor;
     use flate2::read::GzDecoder;
+    use std::io::Cursor;
     use tar::Archive;
 
     let reader = Cursor::new(content);
     let decoder = GzDecoder::new(reader);
     let mut archive = Archive::new(decoder);
 
-    for entry in archive.entries().map_err(|e| CarpError::FileSystem(format!("Failed to read tar entries: {e}")))? {
-        let mut entry = entry.map_err(|e| CarpError::FileSystem(format!("Failed to read tar entry: {e}")))?;
+    for entry in archive
+        .entries()
+        .map_err(|e| CarpError::FileSystem(format!("Failed to read tar entries: {e}")))?
+    {
+        let mut entry =
+            entry.map_err(|e| CarpError::FileSystem(format!("Failed to read tar entry: {e}")))?;
 
-        let path = entry.path().map_err(|e| CarpError::FileSystem(format!("Failed to get entry path: {e}")))?;
+        let path = entry
+            .path()
+            .map_err(|e| CarpError::FileSystem(format!("Failed to get entry path: {e}")))?;
         let file_path = output_dir.join(&path);
 
         // Security: Validate file path to prevent directory traversal attacks
@@ -244,9 +269,10 @@ fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
         // Additional security: Ensure the resolved path is still within output_dir
         let canonical_output = output_dir.canonicalize()?;
         let canonical_file = file_path.canonicalize().unwrap_or_else(|_| {
-            file_path.parent().unwrap_or(output_dir).join(
-                file_path.file_name().unwrap_or_default()
-            )
+            file_path
+                .parent()
+                .unwrap_or(output_dir)
+                .join(file_path.file_name().unwrap_or_default())
         });
 
         if !canonical_file.starts_with(&canonical_output) {
@@ -256,7 +282,9 @@ fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
         }
 
         // Extract the entry
-        entry.unpack(&file_path).map_err(|e| CarpError::FileSystem(format!("Failed to extract file: {e}")))?;
+        entry
+            .unpack(&file_path)
+            .map_err(|e| CarpError::FileSystem(format!("Failed to extract file: {e}")))?;
 
         // Set safe permissions on extracted files
         #[cfg(unix)]

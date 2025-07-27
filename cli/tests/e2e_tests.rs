@@ -1,6 +1,5 @@
 /// End-to-End tests for the CLI application
 /// These tests simulate real user workflows and test the complete integration
-
 use mockito::{Mock, ServerGuard};
 use serde_json::json;
 use std::fs;
@@ -158,9 +157,10 @@ async fn test_cli_search_command() {
     let _mock = ctx
         .mock_server
         .mock("GET", "/api/v1/agents/search")
-        .match_query(mockito::Matcher::AllOf(vec![
-            mockito::Matcher::UrlEncoded("q".to_string(), "test".to_string()),
-        ]))
+        .match_query(mockito::Matcher::AllOf(vec![mockito::Matcher::UrlEncoded(
+            "q".to_string(),
+            "test".to_string(),
+        )]))
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(
@@ -208,7 +208,7 @@ async fn test_cli_search_command() {
 
     assert!(output.status.success(), "CLI search command failed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check that both agents are displayed
     assert!(stdout.contains("test-agent"));
     assert!(stdout.contains("another-agent"));
@@ -338,7 +338,7 @@ async fn test_cli_pull_command() {
     // In a real E2E test, we'd create a proper ZIP file
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // The command should at least attempt to download
     // Check that the download was attempted (may fail on ZIP extraction)
     assert!(
@@ -384,7 +384,7 @@ async fn test_cli_pull_specific_version() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Should attempt to download the specific version
     assert!(
         output.status.success() || stderr.contains("zip") || stdout.contains("Downloaded"),
@@ -427,15 +427,15 @@ async fn test_cli_new_command() {
     let output = ctx.run_cli_command(&["new", "my-test-agent"]);
 
     assert!(output.status.success(), "CLI new command failed");
-    
+
     // Check that the agent directory was created
     let agent_dir = ctx.get_temp_path("my-test-agent");
     assert!(agent_dir.exists(), "Agent directory should be created");
-    
+
     // Check that manifest file was created
     let manifest_path = agent_dir.join("carp.toml");
     assert!(manifest_path.exists(), "Manifest file should be created");
-    
+
     // Verify manifest content
     let manifest_content = fs::read_to_string(manifest_path).expect("Should read manifest");
     assert!(manifest_content.contains("my-test-agent"));
@@ -456,12 +456,18 @@ async fn test_cli_new_with_custom_path() {
     ]);
 
     assert!(output.status.success(), "CLI new with custom path failed");
-    
+
     let agent_dir = custom_path.join("custom-agent");
-    assert!(agent_dir.exists(), "Agent directory should be created at custom path");
-    
+    assert!(
+        agent_dir.exists(),
+        "Agent directory should be created at custom path"
+    );
+
     let manifest_path = agent_dir.join("carp.toml");
-    assert!(manifest_path.exists(), "Manifest should exist at custom path");
+    assert!(
+        manifest_path.exists(),
+        "Manifest should exist at custom path"
+    );
 }
 
 // Test CLI publish command (without authentication)
@@ -476,7 +482,10 @@ async fn test_cli_publish_no_auth() {
     let output = ctx.run_cli_command(&["publish"]);
 
     // Should fail due to lack of authentication
-    assert!(!output.status.success(), "CLI publish without auth should fail");
+    assert!(
+        !output.status.success(),
+        "CLI publish without auth should fail"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("authentication") || stderr.contains("token") || stderr.contains("login"),
@@ -498,7 +507,7 @@ async fn test_cli_publish_dry_run() {
     // Dry run should succeed without making actual API calls
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    
+
     // Should indicate it's a dry run
     assert!(
         stdout.contains("dry run") || stderr.contains("dry run") || output.status.success(),
@@ -510,7 +519,7 @@ async fn test_cli_publish_dry_run() {
 #[tokio::test]
 async fn test_cli_network_error_handling() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    
+
     // Create config pointing to non-existent server
     let config_path = temp_dir.path().join("config.toml");
     let config_content = r#"
@@ -521,14 +530,17 @@ verify_ssl = false
     fs::write(&config_path, config_content).expect("Failed to write config");
 
     let cli_binary_path = e2e_utils::E2ETestContext::find_cli_binary();
-    
+
     let output = Command::new(&cli_binary_path)
         .args(&["search", "test"])
         .env("CARP_CONFIG", &config_path)
         .output()
         .expect("Failed to execute CLI command");
 
-    assert!(!output.status.success(), "CLI should fail with network error");
+    assert!(
+        !output.status.success(),
+        "CLI should fail with network error"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("connection") || stderr.contains("network") || stderr.contains("timeout"),
@@ -585,7 +597,7 @@ async fn test_cli_verbose_output() {
 
     assert!(output.status.success(), "CLI verbose search should work");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    
+
     // Verbose mode should show additional information
     // This depends on how verbose logging is implemented
     assert!(
@@ -620,7 +632,7 @@ async fn test_cli_quiet_output() {
 
     assert!(output.status.success(), "CLI quiet search should work");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Quiet mode should suppress most output
     // The exact behavior depends on implementation
     assert!(

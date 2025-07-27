@@ -5,89 +5,109 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Execute the new command to create an agent template
-pub async fn execute(name: String, path: Option<String>, template: Option<String>, verbose: bool) -> CarpResult<()> {
+pub async fn execute(
+    name: String,
+    path: Option<String>,
+    template: Option<String>,
+    verbose: bool,
+) -> CarpResult<()> {
     // Validate agent name
     validate_agent_name(&name)?;
-    
+
     // Determine target directory
-    let target_dir = path.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(&name));
-    
+    let target_dir = path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(&name));
+
     if target_dir.exists() {
         return Err(CarpError::FileSystem(format!(
             "Directory '{}' already exists. Choose a different path or remove the existing directory.",
             target_dir.display()
         )));
     }
-    
+
     let template_type = template.as_deref().unwrap_or("basic");
-    
+
     if verbose {
-        println!("Creating new agent '{}' using '{}' template...", name, template_type);
+        println!(
+            "Creating new agent '{}' using '{}' template...",
+            name, template_type
+        );
     }
-    
+
     // Create directory structure
     create_directory_structure(&target_dir, &name, template_type, verbose).await?;
-    
-    println!("{} Successfully created agent '{}'", "✓".green().bold(), name.blue().bold());
+
+    println!(
+        "{} Successfully created agent '{}'",
+        "✓".green().bold(),
+        name.blue().bold()
+    );
     println!("Directory: {}", target_dir.display().to_string().cyan());
     println!("\nNext steps:");
     println!("  cd {}", target_dir.display());
     println!("  # Edit the Carp.toml file with your agent details");
     println!("  # Implement your agent logic in agent.py");
     println!("  # Test locally, then run 'carp publish' when ready");
-    
+
     Ok(())
 }
 
 /// Validate the agent name
 fn validate_agent_name(name: &str) -> CarpResult<()> {
     if name.is_empty() {
-        return Err(CarpError::InvalidAgent("Agent name cannot be empty".to_string()));
-    }
-    
-    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
         return Err(CarpError::InvalidAgent(
-            "Agent name can only contain alphanumeric characters, hyphens, and underscores".to_string()
+            "Agent name cannot be empty".to_string(),
         ));
     }
-    
+
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(CarpError::InvalidAgent(
+            "Agent name can only contain alphanumeric characters, hyphens, and underscores"
+                .to_string(),
+        ));
+    }
+
     if name.starts_with('-') || name.ends_with('-') {
         return Err(CarpError::InvalidAgent(
-            "Agent name cannot start or end with a hyphen".to_string()
+            "Agent name cannot start or end with a hyphen".to_string(),
         ));
     }
-    
+
     if name.len() > 50 {
         return Err(CarpError::InvalidAgent(
-            "Agent name cannot be longer than 50 characters".to_string()
+            "Agent name cannot be longer than 50 characters".to_string(),
         ));
     }
-    
+
     Ok(())
 }
 
 /// Create the directory structure and files for the new agent
 async fn create_directory_structure(
-    target_dir: &Path, 
-    name: &str, 
+    target_dir: &Path,
+    name: &str,
     template_type: &str,
-    verbose: bool
+    verbose: bool,
 ) -> CarpResult<()> {
     // Create main directory
     fs::create_dir_all(target_dir)?;
-    
+
     match template_type {
         "basic" => create_basic_template(target_dir, name, verbose).await?,
         "advanced" => create_advanced_template(target_dir, name, verbose).await?,
         "python" => create_python_template(target_dir, name, verbose).await?,
         _ => {
             return Err(CarpError::InvalidAgent(format!(
-                "Unknown template type '{}'. Available: basic, advanced, python", 
+                "Unknown template type '{}'. Available: basic, advanced, python",
                 template_type
             )));
         }
     }
-    
+
     Ok(())
 }
 
@@ -96,13 +116,14 @@ async fn create_basic_template(target_dir: &Path, name: &str, verbose: bool) -> 
     if verbose {
         println!("Creating basic template structure...");
     }
-    
+
     // Create manifest
     let manifest = AgentManifest::template(name);
     manifest.save(target_dir.join("Carp.toml"))?;
-    
+
     // Create README.md
-    let readme_content = format!(r#"# {}
+    let readme_content = format!(
+        r#"# {}
 
 A Claude AI agent created with Carp.
 
@@ -121,10 +142,12 @@ TODO: Document any configuration options.
 ## License
 
 MIT
-"#, name);
-    
+"#,
+        name
+    );
+
     fs::write(target_dir.join("README.md"), readme_content)?;
-    
+
     // Create basic agent script
     let agent_content = r#"#!/usr/bin/env python3
 """
@@ -211,9 +234,9 @@ def main():
 if __name__ == '__main__':
     main()
 "#;
-    
+
     fs::write(target_dir.join("agent.py"), agent_content)?;
-    
+
     // Create basic config file
     let config_content = r#"# Configuration for your Claude AI agent
 # Customize these settings as needed
@@ -228,9 +251,9 @@ debug = false
 timeout = 30
 max_retries = 3
 "#;
-    
+
     fs::write(target_dir.join("config.toml"), config_content)?;
-    
+
     // Create .gitignore
     let gitignore_content = r#"# Python
 __pycache__/
@@ -262,9 +285,9 @@ logs/
 .carp/
 *.tmp
 "#;
-    
+
     fs::write(target_dir.join(".gitignore"), gitignore_content)?;
-    
+
     Ok(())
 }
 
@@ -273,15 +296,15 @@ async fn create_advanced_template(target_dir: &Path, name: &str, verbose: bool) 
     if verbose {
         println!("Creating advanced template structure...");
     }
-    
+
     // Create basic template first
     create_basic_template(target_dir, name, verbose).await?;
-    
+
     // Add additional directories and files
     fs::create_dir_all(target_dir.join("src"))?;
     fs::create_dir_all(target_dir.join("tests"))?;
     fs::create_dir_all(target_dir.join("docs"))?;
-    
+
     // Create a more sophisticated agent structure
     let main_agent_content = r#"#!/usr/bin/env python3
 """
@@ -381,9 +404,9 @@ def main():
 if __name__ == '__main__':
     main()
 "#;
-    
+
     fs::write(target_dir.join("agent.py"), main_agent_content)?;
-    
+
     // Create core agent module
     let core_content = r#""""
 Core agent functionality
@@ -429,9 +452,9 @@ class AgentCore:
                 }
             }
 "#;
-    
+
     fs::write(target_dir.join("src/agent_core.py"), core_content)?;
-    
+
     // Create config manager
     let config_manager_content = r#""""
 Configuration management utilities
@@ -470,15 +493,18 @@ class ConfigManager:
             'max_retries': 3
         }
 "#;
-    
-    fs::write(target_dir.join("src/config_manager.py"), config_manager_content)?;
-    
+
+    fs::write(
+        target_dir.join("src/config_manager.py"),
+        config_manager_content,
+    )?;
+
     // Create requirements.txt
     let requirements_content = r#"toml>=0.10.0
 "#;
-    
+
     fs::write(target_dir.join("requirements.txt"), requirements_content)?;
-    
+
     Ok(())
 }
 
@@ -487,12 +513,13 @@ async fn create_python_template(target_dir: &Path, name: &str, verbose: bool) ->
     if verbose {
         println!("Creating Python template structure...");
     }
-    
+
     // Create advanced template and add Python-specific features
     create_advanced_template(target_dir, name, verbose).await?;
-    
+
     // Add setup.py for proper Python packaging
-    let setup_content = format!(r#"from setuptools import setup, find_packages
+    let setup_content = format!(
+        r#"from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -527,10 +554,12 @@ setup(
         ],
     }},
 )
-"#, name = name);
-    
+"#,
+        name = name
+    );
+
     fs::write(target_dir.join("setup.py"), setup_content)?;
-    
+
     // Add basic test
     let test_content = r#"import unittest
 from src.agent_core import AgentCore
@@ -550,22 +579,22 @@ class TestAgent(unittest.TestCase):
 if __name__ == '__main__':
     unittest.main()
 "#;
-    
+
     fs::write(target_dir.join("tests/test_agent.py"), test_content)?;
-    
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_validate_agent_name() {
         assert!(validate_agent_name("valid-name").is_ok());
         assert!(validate_agent_name("valid_name").is_ok());
         assert!(validate_agent_name("valid123").is_ok());
-        
+
         assert!(validate_agent_name("").is_err());
         assert!(validate_agent_name("-invalid").is_err());
         assert!(validate_agent_name("invalid-").is_err());
