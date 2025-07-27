@@ -5,7 +5,7 @@ import { AgentCard } from '@/components/AgentCard';
 import { TrendingModal } from '@/components/TrendingModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, Clock, Star, Sparkles } from 'lucide-react';
+import { TrendingUp, Clock, Star, Sparkles, Search } from 'lucide-react';
 import { Agent } from '@/hooks/useAgents';
 
 const Index = () => {
@@ -57,166 +57,199 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Main Content - No Scrolling Layout */}
+      {/* Main Content - Conditional Layout */}
       <section className="container mx-auto pb-16 pt-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        {searchQuery ? (
+          /* Search Results Grid */
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">Search Results</h2>
+              <p className="text-muted-foreground">
+                {loading ? 'Searching...' : `${agents.length} result${agents.length !== 1 ? 's' : ''} for "${searchQuery}"`}
+              </p>
+            </div>
 
-            {/* Featured/Trending Agent - Elevated */}
-            <div className="lg:col-span-3 mb-2">
-              {featuredAgent ? (
-                <Card className="relative overflow-hidden bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20 shadow-lg">
-                  <div className="absolute top-4 right-4">
-                    <div className="flex items-center space-x-1 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium">
-                      <Sparkles className="w-4 h-4" />
-                      <span>Trending</span>
-                    </div>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-64 bg-muted rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : agents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {agents.map((agent) => (
+                  <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
+                    <AgentCard agent={agent} />
                   </div>
-                  <CardContent className="p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                      <div>
-                        <h2 className="text-3xl font-bold mb-4">{featuredAgent.name}</h2>
-                        <p className="text-lg text-muted-foreground mb-6 line-clamp-3">
-                          {featuredAgent.description}
-                        </p>
-                        <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-6">
-                          <div className="flex items-center space-x-1">
-                            <TrendingUp className="w-4 h-4" />
-                            <span>{featuredAgent.view_count} views</span>
-                          </div>
-                          {featuredAgent.profiles && (
-                            <span>by {featuredAgent.profiles.display_name || featuredAgent.profiles.github_username}</span>
-                          )}
-                        </div>
-                        <Button
-                          size="lg"
-                          onClick={() => handleAgentClick(featuredAgent)}
-                          className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90"
-                        >
-                          View Agent Details
-                        </Button>
-                      </div>
-                      <div className="hidden md:block">
-                        <div className="bg-muted/50 rounded-lg p-4 h-48 flex items-center justify-center">
-                          <div className="text-center text-muted-foreground">
-                            <Sparkles className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">Featured Agent</p>
-                          </div>
-                        </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+                  <Search className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No agents found</h3>
+                <p className="text-muted-foreground">
+                  No agents match your search for "{searchQuery}". Try different keywords.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Default Layout with Trending/Latest/Top columns */
+          <div className="max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+
+              {/* Featured/Trending Agent - Elevated */}
+              <div className="lg:col-span-3 mb-2">
+                {featuredAgent ? (
+                  <Card className="relative overflow-hidden bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20 shadow-lg">
+                    <div className="absolute top-4 right-4">
+                      <div className="flex items-center space-x-1 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium">
+                        <Sparkles className="w-4 h-4" />
+                        <span>Trending</span>
                       </div>
                     </div>
+                    <CardContent className="p-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div>
+                          <h2 className="text-3xl font-bold mb-4">{featuredAgent.name}</h2>
+                          <p className="text-lg text-muted-foreground mb-6 line-clamp-3">
+                            {featuredAgent.description}
+                          </p>
+                          <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-6">
+                            <div className="flex items-center space-x-1">
+                              <TrendingUp className="w-4 h-4" />
+                              <span>{featuredAgent.view_count} views</span>
+                            </div>
+                            {featuredAgent.profiles && (
+                              <span>by {featuredAgent.profiles.display_name || featuredAgent.profiles.github_username}</span>
+                            )}
+                          </div>
+                          <Button
+                            size="lg"
+                            onClick={() => handleAgentClick(featuredAgent)}
+                            className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90"
+                          >
+                            View Agent Details
+                          </Button>
+                        </div>
+                        <div className="hidden md:block">
+                          <div className="bg-muted/50 rounded-lg p-4 h-48 flex items-center justify-center">
+                            <div className="text-center text-muted-foreground">
+                              <Sparkles className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                              <p className="text-sm">Featured Agent</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="bg-muted/20">
+                    <CardContent className="p-8 text-center">
+                      <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-muted-foreground">No trending agents yet. Be the first to create one!</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Latest Agents Column */}
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Clock className="w-5 h-5" />
+                      <span>Latest</span>
+                    </CardTitle>
+                    <CardDescription>Recently published agents</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {loading ? (
+                      <div className="space-y-4">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+                        ))}
+                      </div>
+                    ) : latestAgents.length > 0 ? (
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {latestAgents.map((agent) => (
+                          <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
+                            <AgentCard agent={agent} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-8">No agents found</p>
+                    )}
                   </CardContent>
                 </Card>
-              ) : (
-                <Card className="bg-muted/20">
-                  <CardContent className="p-8 text-center">
-                    <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-muted-foreground">No trending agents yet. Be the first to create one!</p>
+              </div>
+
+              {/* Top Agents Column */}
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Star className="w-5 h-5" />
+                      <span>Top Rated</span>
+                    </CardTitle>
+                    <CardDescription>Most viewed agents</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {loading ? (
+                      <div className="space-y-4">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+                        ))}
+                      </div>
+                    ) : topAgents.length > 0 ? (
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {topAgents.map((agent) => (
+                          <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
+                            <AgentCard agent={agent} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-8">No agents found</p>
+                    )}
                   </CardContent>
                 </Card>
-              )}
-            </div>
+              </div>
 
-            {/* Latest Agents Column */}
-            <div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Clock className="w-5 h-5" />
-                    <span>Latest</span>
-                  </CardTitle>
-                  <CardDescription>Recently published agents</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {loading ? (
-                    <div className="space-y-4">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                      ))}
-                    </div>
-                  ) : latestAgents.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {latestAgents.map((agent) => (
-                        <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                          <AgentCard agent={agent} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-center py-8">No agents found</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Top Agents Column */}
-            <div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Star className="w-5 h-5" />
-                    <span>Top Rated</span>
-                  </CardTitle>
-                  <CardDescription>Most viewed agents</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {loading ? (
-                    <div className="space-y-4">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                      ))}
-                    </div>
-                  ) : topAgents.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {topAgents.map((agent) => (
-                        <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                          <AgentCard agent={agent} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-center py-8">No agents found</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Search Results or Welcome */}
-            <div>
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    {searchQuery ? `Search Results` : 'All Agents'}
-                  </CardTitle>
-                  <CardDescription>
-                    {searchQuery ? `Results for "${searchQuery}"` : 'Browse all available agents'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {loading ? (
-                    <div className="space-y-4">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                      ))}
-                    </div>
-                  ) : agents.length > 0 ? (
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {agents.slice(0, 10).map((agent) => (
-                        <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                          <AgentCard agent={agent} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-center py-8">
-                      {searchQuery ? 'No agents match your search' : 'No agents found'}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              {/* All Agents Column */}
+              <div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>All Agents</CardTitle>
+                    <CardDescription>Browse all available agents</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {loading ? (
+                      <div className="space-y-4">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+                        ))}
+                      </div>
+                    ) : agents.length > 0 ? (
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {agents.slice(0, 10).map((agent) => (
+                          <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
+                            <AgentCard agent={agent} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-8">No agents found</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* Trending Modal */}

@@ -1,0 +1,81 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// Agent metadata returned by the API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub download_count: u64,
+    pub tags: Vec<String>,
+    pub readme: Option<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+}
+
+/// Search results from the API
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub agents: Vec<Agent>,
+    pub total: usize,
+    pub page: usize,
+    pub per_page: usize,
+}
+
+/// Agent download information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AgentDownload {
+    pub name: String,
+    pub version: String,
+    pub download_url: String,
+    pub checksum: String,
+    pub size: u64,
+}
+
+/// Request for publishing an agent
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishRequest {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub readme: Option<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+    pub tags: Vec<String>,
+}
+
+/// Response from publishing an agent
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PublishResponse {
+    pub success: bool,
+    pub message: String,
+    pub agent: Option<Agent>,
+}
+
+/// API error response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiError {
+    pub error: String,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+/// Authentication request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// Authentication response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthResponse {
+    pub token: String,
+    pub expires_at: DateTime<Utc>,
+}

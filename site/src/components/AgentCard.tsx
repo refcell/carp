@@ -17,13 +17,13 @@ export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps)
       className="cursor-pointer hover:shadow-md transition-all duration-200 h-full flex flex-col"
       onClick={onClick}
     >
-      <CardHeader className="pb-3">
+      <CardHeader className={`pb-3 ${!showAuthor ? 'pr-20' : ''}`}>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg font-semibold line-clamp-1">
+            <CardTitle className="text-lg font-semibold line-clamp-1 mb-2">
               {agent.name}
             </CardTitle>
-            <CardDescription className="line-clamp-2 mt-1">
+            <CardDescription className="line-clamp-2 mt-1 text-sm leading-relaxed">
               {agent.description}
             </CardDescription>
           </div>
@@ -44,17 +44,17 @@ export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps)
         )}
       </CardHeader>
       
-      <CardContent className="pt-0 flex-1 flex flex-col justify-between">
+      <CardContent className="pt-0 flex-1 flex flex-col justify-between px-6 pb-4">
         <div>
           {agent.tags && agent.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-3">
+            <div className="flex flex-wrap gap-1 mb-4">
               {agent.tags.slice(0, 3).map((tag, index) => (
-                <Badge key={index} variant="secondary" className="text-xs">
+                <Badge key={index} variant="secondary" className="text-xs px-2 py-1">
                   {tag}
                 </Badge>
               ))}
               {agent.tags.length > 3 && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs px-2 py-1">
                   +{agent.tags.length - 3}
                 </Badge>
               )}
@@ -62,7 +62,7 @@ export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps)
           )}
         </div>
         
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
           <div className="flex items-center space-x-1">
             <Eye className="w-3 h-3" />
             <span>{agent.view_count}</span>

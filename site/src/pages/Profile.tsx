@@ -177,14 +177,15 @@ export default function Profile() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
             {userAgents.map((agent) => (
-              <div key={agent.id} className="relative">
+              <div key={agent.id} className="relative min-h-[220px] lg:min-h-[240px]">
                 <AgentCard agent={agent} showAuthor={false} />
-                <div className="absolute top-4 right-4 flex space-x-2">
+                <div className="absolute top-2 right-2 flex space-x-1 z-10">
                   <Button
                     size="sm"
                     variant="outline"
+                    className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm border-2 hover:bg-background/90"
                     onClick={() => handleEdit(agent)}
                   >
                     <Edit className="w-3 h-3" />
@@ -192,6 +193,7 @@ export default function Profile() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm border-2 hover:bg-background/90"
                     onClick={() => handleDelete(agent.id, agent.name)}
                   >
                     <Trash2 className="w-3 h-3" />
