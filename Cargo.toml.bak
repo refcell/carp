@@ -8,7 +8,7 @@ rust-version = "1.82"
 
 [[bin]]
 name = "vercel-handler"
-path = "src/main.rs"
+path = "serverless/src/main.rs"
 
 [dependencies]
 # Core web framework - minimal for serverless

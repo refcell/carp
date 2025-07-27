@@ -417,8 +417,9 @@ AS $$
          COALESCE(array_to_string(keywords, ' '), '')
 $$;
 
--- Update the search index to use the immutable function
-DROP INDEX IF EXISTS idx_agents_search;
-CREATE INDEX idx_agents_search ON public.agents USING GIN(
+-- Update the existing search index to use the immutable function
+-- First drop the old index name and create the new one
+DROP INDEX IF EXISTS idx_agents_name_search;
+CREATE INDEX IF NOT EXISTS idx_agents_search ON public.agents USING GIN(
   to_tsvector('english', public.agent_search_text(name, description, author_name, tags, keywords))
 );

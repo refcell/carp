@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use serde_json::json;
+use tower::util::ServiceExt;
 
 // Simple health check handler
 async fn health() -> Result<Json<serde_json::Value>, StatusCode> {
@@ -34,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Starting Carp API Serverless Handler");
 
     // Create router with basic routes
-    let app = create_app();
+    let _app = create_app();
 
     // For serverless, we don't start a server but export the router
     // Vercel will handle the HTTP layer

@@ -1,5 +1,17 @@
 project_id = "ezzhefcasphhtccpgidu"
 
 [auth]
-site_url = "https://carps.vercel.app"
-additional_redirect_urls = ["https://carp.refcell.org", "http://localhost:8080", "http://localhost:8081", "http://localhost:8082"]
+site_url = "https://carp.refcell.org"
+additional_redirect_urls = ["https://2de19fa5-caa2-47f6-8527-9af7c3ef0157.lovableproject.com/**", "https://claude-hub-registry.lovable.app/**", "https://id-preview--2de19fa5-caa2-47f6-8527-9af7c3ef0157.lovable.app/**", "https://preview--claude-hub-registry.lovable.app/**", "http://localhost:8080"]
+
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 6
+otp_expiry = 86400
+

@@ -1,6 +1,10 @@
 # Build artifacts
 target/
-*.lock
+Cargo.lock
+
+# Documentation
+*.md
+docs/
 
 # IDE files
 .vscode/
@@ -12,13 +16,19 @@ target/
 .DS_Store
 Thumbs.db
 
-# Local development
-.env
-.env.local
+# Temporary files
+*.tmp
+*.temp
 
-# Documentation
-docs/
-*.md
+# Git files
+.git/
+.gitignore
+
+# Supabase temp files
+supabase/.temp/
+
+# Testing
+tests/
 
 # CLI tool (not needed for API deployment)
 cli/
@@ -26,6 +36,8 @@ cli/
 # Site (not needed for API deployment)  
 site/
 
-# Only deploy the API
-!api/
-!vercel.json
+# Serverless directory (not needed since we're using api/ structure)
+serverless/
+
+# Old handler file
+api-handler.rs

@@ -323,9 +323,7 @@ WHERE yanked = false;
 CREATE INDEX IF NOT EXISTS idx_download_stats_agent_date 
 ON public.download_stats(agent_id, downloaded_at DESC);
 
--- Removed idx_download_stats_recent due to immutable function requirement
-
--- Create partial indexes for active tokens (simplified to avoid immutable function issue)
+-- Create partial indexes for active tokens
 CREATE INDEX IF NOT EXISTS idx_api_tokens_active 
 ON public.api_tokens(user_id, token_hash) 
 WHERE is_active = true;
