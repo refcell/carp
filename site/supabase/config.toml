@@ -1,1 +1,5 @@
 project_id = "ezzhefcasphhtccpgidu"
+
+[auth]
+site_url = "https://carps.vercel.app"
+additional_redirect_urls = ["https://carp.refcell.org", "http://localhost:8080", "http://localhost:8081", "http://localhost:8082"]
