@@ -1,11 +1,23 @@
 {
   "version": 2,
+  "buildCommand": "cd site && npm install && npm run build",
+  "outputDirectory": "site/dist",
   "functions": {
     "api/**/*.rs": {
       "runtime": "vercel-rust@4.0.9",
       "maxDuration": 30
     }
   },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ],
   "env": {
     "RUST_LOG": "info"
   }

@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "Claude Agent Registry Portal",
   "scripts": {
+    "build": "cd site && npm run build",
+    "dev": "cd site && npm run dev",
+    "preview": "cd site && npm run preview",
     "deploy": "vercel --prod",
     "deploy:preview": "vercel",
     "logs": "vercel logs",
     "env:add": "vercel env add",
     "env:list": "vercel env ls"
-  },
-  "dependencies": {
-    "vite": "^7.0.6"
   },
   "devDependencies": {
     "vercel": "^32.0.0"

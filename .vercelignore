@@ -30,11 +30,8 @@ supabase/.temp/
 # Testing
 tests/
 
-# CLI tool (not needed for API deployment)
+# CLI tool (not needed for web deployment)
 cli/
-
-# Site (not needed for API deployment)  
-site/
 
 # Serverless directory (not needed since we're using api/ structure)
 serverless/
