@@ -17,7 +17,7 @@ export function TrendingModal({ agent, open, onClose }: TrendingModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-start justify-between space-y-0">
           <div className="flex-1">
             <DialogTitle className="text-2xl font-bold mb-2">{agent.name}</DialogTitle>

@@ -9,17 +9,17 @@ import { TrendingUp, Clock, Star, Sparkles } from 'lucide-react';
 import { Agent } from '@/hooks/useAgents';
 
 const Index = () => {
-  const { 
-    agents, 
-    loading, 
-    searchQuery, 
-    setSearchQuery, 
-    trendingAgents, 
-    latestAgents, 
+  const {
+    agents,
+    loading,
+    searchQuery,
+    setSearchQuery,
+    trendingAgents,
+    latestAgents,
     topAgents,
-    incrementViewCount 
+    incrementViewCount
   } = useAgents();
-  
+
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showTrendingModal, setShowTrendingModal] = useState(false);
 
@@ -34,20 +34,20 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
-      <section className="py-16 px-4">
+      <section className="pt-16">
         <div className="container mx-auto text-center">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               Claude Agent Registry
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Discover, share, and use powerful Claude AI agents created by the community. 
+              Discover, share, and use powerful Claude AI agents created by the community.
               Find the perfect assistant for any task.
             </p>
-            
+
             {/* Search Bar */}
-            <div className="mb-12">
-              <SearchBar 
+            <div className="mb-6">
+              <SearchBar
                 value={searchQuery}
                 onChange={setSearchQuery}
                 placeholder="Search for agents, tags, or descriptions..."
@@ -58,12 +58,12 @@ const Index = () => {
       </section>
 
       {/* Main Content - No Scrolling Layout */}
-      <section className="px-4 pb-16">
-        <div className="container mx-auto">
+      <section className="container mx-auto pb-16 pt-4">
+        <div className="max-w-4xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-            
+
             {/* Featured/Trending Agent - Elevated */}
-            <div className="lg:col-span-3 mb-8">
+            <div className="lg:col-span-3 mb-2">
               {featuredAgent ? (
                 <Card className="relative overflow-hidden bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20 shadow-lg">
                   <div className="absolute top-4 right-4">
@@ -88,8 +88,8 @@ const Index = () => {
                             <span>by {featuredAgent.profiles.display_name || featuredAgent.profiles.github_username}</span>
                           )}
                         </div>
-                        <Button 
-                          size="lg" 
+                        <Button
+                          size="lg"
                           onClick={() => handleAgentClick(featuredAgent)}
                           className="bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90"
                         >

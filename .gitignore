@@ -3,6 +3,8 @@
 debug
 target
 
+bun.lock
+bun.lockb
 node_modules
 package-lock.json
 
