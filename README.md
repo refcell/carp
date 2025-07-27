@@ -27,7 +27,7 @@ The `carp` command-line tool provides a seamless experience for working with Cla
 
 ```bash
 # Install from crates.io (coming soon)
-cargo install carp
+cargo install carp-cli
 
 # Or build from source
 git clone https://github.com/refcell/carp
