@@ -14,6 +14,18 @@ path = "api/health.rs"
 name = "v1-agents-search"
 path = "api/v1/agents/search.rs"
 
+[[bin]]
+name = "v1-agents-download"
+path = "api/v1/agents/download.rs"
+
+[[bin]]
+name = "v1-agents-publish"
+path = "api/v1/agents/publish.rs"
+
+[[bin]]
+name = "v1-auth-login"
+path = "api/v1/auth/login.rs"
+
 [dependencies]
 # Vercel runtime for serverless functions
 vercel_runtime = "1.0"
@@ -31,6 +43,29 @@ http = "0.2"
 
 # URL parsing
 url = "2.0"
+
+# Database (Supabase)
+postgrest = "1.5"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Authentication & crypto
+jsonwebtoken = "9.0"
+argon2 = "0.5"
+rand = "0.8"
+
+# File handling
+sha2 = "0.10"
+zip = "0.6"
+bytes = "1.0"
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Environment
+dotenvy = "0.15"
 
 [profile.release]
 lto = true
