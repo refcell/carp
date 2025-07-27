@@ -6,7 +6,7 @@ export interface Agent {
   id: string;
   name: string;
   description: string;
-  definition: any;
+  definition: Record<string, unknown>;
   tags: string[] | null;
   view_count: number;
   created_at: string;
@@ -26,7 +26,7 @@ export function useAgents() {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
-  const fetchAgents = useCallback(async (search?: string) => {
+  const fetchAgents = useCallback(async (search?: string, limit?: number, offset?: number) => {
     setLoading(true);
     try {
       let query = supabase
@@ -40,12 +40,20 @@ export function useAgents() {
         query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
       }
 
+      if (limit !== undefined) {
+        query = query.limit(limit);
+      }
+
+      if (offset !== undefined) {
+        query = query.range(offset, offset + (limit || 20) - 1);
+      }
+
       const { data, error } = await query;
       
       if (!error && data) {
         // Fetch profile data for each agent if needed
         const agentsWithProfiles = await Promise.all(
-          data.map(async (agent: any) => {
+          data.map(async (agent: Agent) => {
             try {
               const { data: profile } = await supabase
                 .from('profiles')
@@ -79,6 +87,67 @@ export function useAgents() {
     }
   }, []);
 
+  const fetchAgentsPaginated = useCallback(async (limit: number = 20, offset: number = 0, search?: string) => {
+    try {
+      let query = supabase
+        .from('agents')
+        .select('*')
+        .eq('is_public', true)
+        .order('created_at', { ascending: false });
+
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
+      }
+
+      // Fetch one extra item to check if there are more
+      query = query.range(offset, offset + limit);
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching paginated agents:', error);
+        return { agents: [], hasMore: false };
+      }
+
+      if (!data) {
+        return { agents: [], hasMore: false };
+      }
+
+      // Check if we have more items by comparing with the expected limit + 1
+      const hasMore = data.length === limit + 1;
+      const actualData = hasMore ? data.slice(0, limit) : data;
+
+      // Fetch profile data for each agent
+      const agentsWithProfiles = await Promise.all(
+        actualData.map(async (agent: Agent) => {
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('github_username, display_name, avatar_url')
+              .eq('user_id', agent.user_id)
+              .single();
+            
+            return {
+              ...agent,
+              profiles: profile || null
+            };
+          } catch {
+            return {
+              ...agent,
+              profiles: null
+            };
+          }
+        })
+      );
+      
+      return { agents: agentsWithProfiles as Agent[], hasMore };
+    } catch (error) {
+      console.error('Error fetching paginated agents:', error);
+      return { agents: [], hasMore: false };
+    }
+  }, []);
+
   const fetchUserAgents = async () => {
     if (!user) return [];
     
@@ -88,7 +157,18 @@ export function useAgents() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
-    return error ? [] : (data as Agent[]);
+    if (error) {
+      console.error('Error fetching user agents:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return [];
+    }
+    
+    return data as Agent[];
   };
 
   const incrementViewCount = async (agentId: string) => {
@@ -258,7 +338,9 @@ export function useAgents() {
     .sort((a, b) => b.view_count - a.view_count)
     .slice(0, 5);
 
-  const latestAgents = agents.slice(0, 10);
+  const latestAgents = agents
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10);
 
   const topAgents = agents
     .sort((a, b) => b.view_count - a.view_count)
@@ -277,6 +359,7 @@ export function useAgents() {
     latestAgents,
     topAgents,
     fetchAgents,
+    fetchAgentsPaginated,
     fetchUserAgents,
     incrementViewCount,
     createAgent,

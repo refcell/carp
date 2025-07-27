@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import Create from "./pages/Create";
 import Profile from "./pages/Profile";
 import Usage from "./pages/Usage";
+import AllAgents from "./pages/AllAgents";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
                 <Route path="/create" element={<Create />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/usage" element={<Usage />} />
+                <Route path="/all-agents" element={<AllAgents />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               <ThemeToggle />

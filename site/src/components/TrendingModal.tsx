@@ -73,7 +73,7 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
       navigator.clipboard.writeText(prompt);
       toast({
         title: "Copied!",
-        description: "Agent prompt copied to clipboard"
+        description: "Agent definition copied to clipboard"
       });
     }
   };
@@ -163,17 +163,17 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
             </div>
           </div>
 
-          {/* Agent Prompt - User-friendly display */}
+          {/* Agent Definition - User-friendly display */}
           {prompt && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium">Agent Prompt</h4>
+                <h4 className="font-medium">Agent Definition</h4>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={copyPrompt}
                   className="flex items-center space-x-2"
-                  aria-label="Copy agent prompt"
+                  aria-label="Copy agent definition"
                 >
                   <Copy className="w-3 h-3" />
                   <span>Copy</span>

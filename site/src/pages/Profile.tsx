@@ -46,7 +46,19 @@ export default function Profile() {
     setEditingAgent(agent);
     setEditName(agent.name);
     setEditDescription(agent.description);
-    setEditDefinition(JSON.stringify(agent.definition, null, 2));
+    
+    // Extract prompt from definition like the TrendingModal does
+    let promptContent = '';
+    if (typeof agent.definition === 'string') {
+      promptContent = agent.definition;
+    } else if (typeof agent.definition === 'object' && agent.definition?.prompt) {
+      promptContent = agent.definition.prompt;
+    } else {
+      // Fallback to JSON if no prompt field found
+      promptContent = JSON.stringify(agent.definition, null, 2);
+    }
+    
+    setEditDefinition(promptContent);
     setEditTags(agent.tags || []);
   };
 
@@ -256,7 +268,7 @@ export default function Profile() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Definition</label>
+                <label className="block text-sm font-medium mb-2">Agent Definition</label>
                 <Textarea
                   value={editDefinition}
                   onChange={(e) => setEditDefinition(e.target.value)}

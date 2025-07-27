@@ -97,10 +97,10 @@ const Index = () => {
         ) : (
           /* Default Layout with Trending/Latest/Top columns */
           <div className="max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto">
 
               {/* Featured/Trending Agent - Elevated */}
-              <div className="lg:col-span-3 mb-2">
+              <div className="lg:col-span-2 mb-2">
                 {featuredAgent ? (
                   <Card className="relative overflow-hidden bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20 shadow-lg">
                     <div className="absolute top-4 right-4">
@@ -218,34 +218,6 @@ const Index = () => {
                 </Card>
               </div>
 
-              {/* All Agents Column */}
-              <div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>All Agents</CardTitle>
-                    <CardDescription>Browse all available agents</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {loading ? (
-                      <div className="space-y-4">
-                        {Array.from({ length: 3 }).map((_, i) => (
-                          <div key={i} className="h-20 bg-muted rounded animate-pulse" />
-                        ))}
-                      </div>
-                    ) : agents.length > 0 ? (
-                      <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {agents.slice(0, 10).map((agent) => (
-                          <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                            <AgentCard agent={agent} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground text-center py-8">No agents found</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </div>
         )}

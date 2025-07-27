@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgents } from '@/hooks/useAgents';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ export default function Create() {
   const { createAgent } = useAgents();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -22,6 +23,25 @@ export default function Create() {
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isUploadMode, setIsUploadMode] = useState(false);
+
+  // Handle URL parameters for uploaded agent data
+  useEffect(() => {
+    const uploadFlag = searchParams.get('upload');
+    const uploadedName = searchParams.get('name');
+    const uploadedDescription = searchParams.get('description');
+    const uploadedContent = searchParams.get('content');
+
+    if (uploadFlag === 'true') {
+      setIsUploadMode(true);
+      if (uploadedName) setName(uploadedName);
+      if (uploadedDescription) setDescription(uploadedDescription);
+      if (uploadedContent) setDefinition(uploadedContent);
+
+      // Clear URL parameters after loading data
+      navigate('/create', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   if (!user) {
     return (
@@ -87,9 +107,14 @@ export default function Create() {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-2xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Create New Agent</h1>
+          <h1 className="text-3xl font-bold">
+            {isUploadMode ? 'Upload Agent' : 'Create New Agent'}
+          </h1>
           <p className="text-muted-foreground mt-2">
-            Share your Claude agent with the community
+            {isUploadMode 
+              ? 'Review and customize your uploaded agent before sharing'
+              : 'Share your Claude agent with the community'
+            }
           </p>
         </div>
 
@@ -97,7 +122,10 @@ export default function Create() {
           <CardHeader>
             <CardTitle>Agent Details</CardTitle>
             <CardDescription>
-              Provide information about your Claude agent
+              {isUploadMode 
+                ? 'Review and modify the details parsed from your uploaded agent file'
+                : 'Provide information about your Claude agent'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -159,7 +187,7 @@ export default function Create() {
 
               <div>
                 <label htmlFor="definition" className="block text-sm font-medium mb-2">
-                  Agent Definition
+                  Agent Definition {isUploadMode && '(from uploaded file)'}
                 </label>
                 <Textarea
                   id="definition"
