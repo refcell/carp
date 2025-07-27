@@ -31,14 +31,7 @@ export function useAgents() {
     try {
       let query = supabase
         .from('agents')
-        .select(`
-          *,
-          profiles (
-            github_username,
-            display_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('is_public', true)
         .order('created_at', { ascending: false });
 
@@ -50,7 +43,30 @@ export function useAgents() {
       const { data, error } = await query;
       
       if (!error && data) {
-        setAgents(data as unknown as Agent[]);
+        // Fetch profile data for each agent if needed
+        const agentsWithProfiles = await Promise.all(
+          data.map(async (agent: any) => {
+            try {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('github_username, display_name, avatar_url')
+                .eq('user_id', agent.user_id)
+                .single();
+              
+              return {
+                ...agent,
+                profiles: profile || null
+              };
+            } catch {
+              return {
+                ...agent,
+                profiles: null
+              };
+            }
+          })
+        );
+        
+        setAgents(agentsWithProfiles as Agent[]);
       } else if (error) {
         console.error('Error fetching agents:', error);
         setAgents([]);
