@@ -15,8 +15,8 @@ name = "v1-agents-search"
 path = "api/v1/agents/search.rs"
 
 [[bin]]
-name = "v1-agents-download"
-path = "api/v1/agents/download.rs"
+name = "v1-agents-name-version-download"
+path = "api/v1/agents/[name]/[version]/download.rs"
 
 [[bin]]
 name = "v1-agents-publish"
@@ -66,6 +66,9 @@ anyhow = "1.0"
 
 # Environment
 dotenvy = "0.15"
+
+# URL encoding
+urlencoding = "2.1"
 
 [profile.release]
 lto = true

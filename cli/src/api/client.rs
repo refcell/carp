@@ -98,7 +98,7 @@ impl ApiClient {
 
         let response = self.client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .multipart(form)
             .send()
             .await?;
@@ -152,27 +152,33 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{mock, server_url};
+    use mockito::Server;
 
     #[tokio::test]
     async fn test_search_request() {
+        let mut server = Server::new_async().await;
         let config = Config {
-            registry_url: server_url(),
+            registry_url: server.url(),
             api_token: None,
             timeout: 30,
             verify_ssl: true,
             default_output_dir: None,
         };
 
-        let _m = mock("GET", "/api/v1/agents/search")
+        let _m = server.mock("GET", "/api/v1/agents/search")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(r#"{"agents": [], "total": 0, "page": 1, "per_page": 10}"#)
-            .create();
+            .create_async()
+            .await;
 
         let client = ApiClient::new(&config).unwrap();
         let result = client.search("test", Some(10), false).await;
         
+        match &result {
+            Ok(_) => (),
+            Err(e) => println!("Test error: {:?}", e),
+        }
         assert!(result.is_ok());
         let response = result.unwrap();
         assert_eq!(response.agents.len(), 0);

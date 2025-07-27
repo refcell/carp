@@ -30,11 +30,15 @@ pub struct SearchResponse {
 /// Agent download information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AgentDownload {
+    pub agent_id: String,
     pub name: String,
+    pub author: String,
     pub version: String,
     pub download_url: String,
+    pub file_size: u64,
     pub checksum: String,
-    pub size: u64,
+    pub content_type: String,
+    pub definition: serde_json::Value,
 }
 
 /// Request for publishing an agent

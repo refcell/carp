@@ -1,7 +1,7 @@
 use crate::utils::error::{CarpError, CarpResult};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Configuration structure for the Carp CLI
 #[derive(Debug, Clone, Serialize, Deserialize)]

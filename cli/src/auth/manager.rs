@@ -1,6 +1,6 @@
 use crate::api::ApiClient;
-use crate::config::{Config, ConfigManager};
-use crate::utils::error::{CarpError, CarpResult};
+use crate::config::ConfigManager;
+use crate::utils::error::CarpResult;
 use colored::*;
 use std::io::{self, Write};
 

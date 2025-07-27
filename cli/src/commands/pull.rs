@@ -3,7 +3,6 @@ use crate::config::ConfigManager;
 use crate::utils::error::{CarpError, CarpResult};
 use colored::*;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Execute the pull command
@@ -25,7 +24,7 @@ pub async fn execute(agent: String, output: Option<String>, force: bool, verbose
         println!("Found {} v{} ({} bytes)", 
                 download_info.name, 
                 download_info.version,
-                download_info.size);
+                download_info.file_size);
     }
     
     // Determine output directory
@@ -62,7 +61,7 @@ pub async fn execute(agent: String, output: Option<String>, force: bool, verbose
     if verbose {
         println!("Extracting to {}...", output_dir.display());
     }
-    extract_agent(&content, &output_dir)?;
+    extract_agent(&content, &output_dir, &download_info.content_type)?;
     
     println!("{} Successfully pulled {} v{} to {}", 
             "✓".green().bold(),
@@ -112,43 +111,69 @@ fn determine_output_dir(name: &str, output: Option<String>, config: &crate::conf
 
 /// Verify the checksum of downloaded content
 fn verify_checksum(content: &[u8], expected: &str) -> CarpResult<()> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use sha2::{Sha256, Digest};
     
-    let mut hasher = DefaultHasher::new();
-    content.hash(&mut hasher);
-    let computed = format!("{:x}", hasher.finish());
+    // Parse expected checksum (remove "sha256-" prefix if present)
+    let expected_hash = if expected.starts_with("sha256-") {
+        &expected[7..]
+    } else {
+        expected
+    };
     
-    if computed != expected {
-        return Err(CarpError::Network(
-            "Checksum verification failed. The downloaded file may be corrupted.".to_string()
-        ));
+    let mut hasher = Sha256::new();
+    hasher.update(content);
+    let computed = format!("{:x}", hasher.finalize());
+    
+    if computed != expected_hash {
+        return Err(CarpError::Network(format!(
+            "Checksum verification failed. Expected: {expected_hash}, Computed: {computed}. The downloaded file may be corrupted."
+        )));
     }
     
     Ok(())
 }
 
 /// Extract agent content to the specified directory
-fn extract_agent(content: &[u8], output_dir: &Path) -> CarpResult<()> {
-    use std::io::Cursor;
+fn extract_agent(content: &[u8], output_dir: &Path, content_type: &str) -> CarpResult<()> {
     
     // Create output directory
     fs::create_dir_all(output_dir)?;
     
-    // For now, assume the content is a ZIP file
+    match content_type {
+        "application/zip" => extract_zip(content, output_dir),
+        "application/gzip" | "application/x-gzip" => extract_gzip(content, output_dir),
+        _ => {
+            // Try to detect format by checking magic bytes
+            if content.starts_with(&[0x50, 0x4b, 0x03, 0x04]) || content.starts_with(&[0x50, 0x4b, 0x05, 0x06]) {
+                extract_zip(content, output_dir)
+            } else if content.starts_with(&[0x1f, 0x8b]) {
+                extract_gzip(content, output_dir)
+            } else {
+                Err(CarpError::FileSystem(format!(
+                    "Unsupported content type: {content_type}. Expected ZIP or GZIP format."
+                )))
+            }
+        }
+    }
+}
+
+/// Extract ZIP archive content
+fn extract_zip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
+    use std::io::Cursor;
+    
     let reader = Cursor::new(content);
     let mut archive = zip::ZipArchive::new(reader)
-        .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP archive: {}", e)))?;
+        .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP archive: {e}")))?;
     
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)
-            .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP entry: {}", e)))?;
+            .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP entry: {e}")))?;
         
         // Security: Validate file path to prevent directory traversal attacks
         let file_name = file.name();
         if file_name.contains("..") || file_name.starts_with('/') || file_name.contains('\0') {
             return Err(CarpError::FileSystem(format!(
-                "Unsafe file path in archive: {}", file_name
+                "Unsafe file path in archive: {file_name}"
             )));
         }
         
@@ -164,7 +189,7 @@ fn extract_agent(content: &[u8], output_dir: &Path) -> CarpResult<()> {
         
         if !canonical_file.starts_with(&canonical_output) {
             return Err(CarpError::FileSystem(format!(
-                "File path outside target directory: {}", file_name
+                "File path outside target directory: {file_name}"
             )));
         }
         
@@ -183,6 +208,62 @@ fn extract_agent(content: &[u8], output_dir: &Path) -> CarpResult<()> {
             {
                 use std::os::unix::fs::PermissionsExt;
                 let mut perms = output_file.metadata()?.permissions();
+                perms.set_mode(0o644); // Owner read/write, group/other read
+                fs::set_permissions(&file_path, perms)?;
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Extract GZIP archive content (assumes it's a tar.gz)
+fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
+    use std::io::Cursor;
+    use flate2::read::GzDecoder;
+    use tar::Archive;
+    
+    let reader = Cursor::new(content);
+    let decoder = GzDecoder::new(reader);
+    let mut archive = Archive::new(decoder);
+    
+    for entry in archive.entries().map_err(|e| CarpError::FileSystem(format!("Failed to read tar entries: {e}")))? {
+        let mut entry = entry.map_err(|e| CarpError::FileSystem(format!("Failed to read tar entry: {e}")))?;
+        
+        let path = entry.path().map_err(|e| CarpError::FileSystem(format!("Failed to get entry path: {e}")))?;
+        let file_path = output_dir.join(&path);
+        
+        // Security: Validate file path to prevent directory traversal attacks
+        let path_str = path.to_string_lossy();
+        if path_str.contains("..") || path_str.starts_with('/') || path_str.contains('\0') {
+            return Err(CarpError::FileSystem(format!(
+                "Unsafe file path in archive: {path_str}"
+            )));
+        }
+        
+        // Additional security: Ensure the resolved path is still within output_dir
+        let canonical_output = output_dir.canonicalize()?;
+        let canonical_file = file_path.canonicalize().unwrap_or_else(|_| {
+            file_path.parent().unwrap_or(output_dir).join(
+                file_path.file_name().unwrap_or_default()
+            )
+        });
+        
+        if !canonical_file.starts_with(&canonical_output) {
+            return Err(CarpError::FileSystem(format!(
+                "File path outside target directory: {path_str}"
+            )));
+        }
+        
+        // Extract the entry
+        entry.unpack(&file_path).map_err(|e| CarpError::FileSystem(format!("Failed to extract file: {e}")))?;
+        
+        // Set safe permissions on extracted files
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if file_path.is_file() {
+                let mut perms = fs::metadata(&file_path)?.permissions();
                 perms.set_mode(0o644); // Owner read/write, group/other read
                 fs::set_permissions(&file_path, perms)?;
             }
