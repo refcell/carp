@@ -1,0 +1,15 @@
+name = "my-test-agent"
+version = "0.1.0"
+description = "A Claude AI agent named my-test-agent"
+author = "Your Name <your.email@example.com>"
+license = "MIT"
+tags = [
+    "claude",
+    "ai",
+]
+files = [
+    "README.md",
+    "agent.py",
+    "config.toml",
+]
+main = "agent.py"

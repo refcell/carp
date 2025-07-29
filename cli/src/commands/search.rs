@@ -14,7 +14,7 @@ pub async fn execute(
         println!("Searching for agents matching '{}'...", query);
     }
 
-    let config = ConfigManager::load()?;
+    let config = ConfigManager::load_with_env_checks()?;
     let client = ApiClient::new(&config)?;
 
     let response = client.search(&query, limit, exact).await?;

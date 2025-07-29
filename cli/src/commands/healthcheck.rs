@@ -9,7 +9,7 @@ pub async fn execute(verbose: bool) -> CarpResult<()> {
         println!("Checking API health...");
     }
 
-    let config = ConfigManager::load()?;
+    let config = ConfigManager::load_with_env_checks()?;
     let client = ApiClient::new(&config)?;
 
     let response = client.health_check().await?;

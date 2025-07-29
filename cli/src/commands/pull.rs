@@ -24,7 +24,7 @@ pub async fn execute(
         );
     }
 
-    let config = ConfigManager::load()?;
+    let config = ConfigManager::load_with_env_checks()?;
     let client = ApiClient::new(&config)?;
 
     // Get download information

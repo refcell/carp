@@ -8,7 +8,7 @@ mod commands;
 mod config;
 mod utils;
 
-use commands::{healthcheck, new, publish, pull, search};
+use commands::{healthcheck, pull, search, upload};
 use utils::error::CarpResult;
 
 #[derive(Parser)]
@@ -58,28 +58,15 @@ enum Commands {
         force: bool,
     },
 
-    /// Publish an agent to the registry
-    Publish {
-        #[arg(short, long, help = "Path to agent manifest")]
-        manifest: Option<String>,
-
-        #[arg(long, help = "Skip confirmation prompts")]
-        yes: bool,
-
-        #[arg(long, help = "Perform a dry run without publishing")]
-        dry_run: bool,
-    },
-
-    /// Create a new agent template
-    New {
-        /// Name of the new agent
-        name: String,
-
-        #[arg(short, long, help = "Target directory")]
-        path: Option<String>,
-
-        #[arg(long, help = "Agent template type")]
-        template: Option<String>,
+    /// Upload an agent from the local filesystem to the registry
+    Upload {
+        #[arg(
+            short,
+            long,
+            help = "Directory to scan for agents",
+            default_value = "~/.claude/agents/"
+        )]
+        directory: Option<String>,
     },
 }
 
@@ -106,15 +93,6 @@ async fn run(cli: Cli) -> CarpResult<()> {
             output,
             force,
         } => pull::execute(agent, output, force, cli.verbose).await,
-        Commands::Publish {
-            manifest,
-            yes,
-            dry_run,
-        } => publish::execute(manifest, yes, dry_run, cli.verbose).await,
-        Commands::New {
-            name,
-            path,
-            template,
-        } => new::execute(name, path, template, cli.verbose).await,
+        Commands::Upload { directory } => upload::execute(directory, cli.verbose).await,
     }
 }

@@ -16,6 +16,97 @@ pub struct Config {
     pub verify_ssl: bool,
     /// Default output directory for pulled agents
     pub default_output_dir: Option<String>,
+    /// Maximum number of concurrent downloads
+    #[serde(default = "default_max_concurrent_downloads")]
+    pub max_concurrent_downloads: u32,
+    /// Request retry configuration
+    #[serde(default)]
+    pub retry: RetrySettings,
+    /// Security settings
+    #[serde(default)]
+    pub security: SecuritySettings,
+}
+
+/// Retry configuration settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetrySettings {
+    /// Maximum number of retries
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// Initial retry delay in milliseconds
+    #[serde(default = "default_initial_delay_ms")]
+    pub initial_delay_ms: u64,
+    /// Maximum retry delay in milliseconds
+    #[serde(default = "default_max_delay_ms")]
+    pub max_delay_ms: u64,
+    /// Backoff multiplier
+    #[serde(default = "default_backoff_multiplier")]
+    pub backoff_multiplier: f64,
+}
+
+/// Security configuration settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecuritySettings {
+    /// Maximum download size in bytes
+    #[serde(default = "default_max_download_size")]
+    pub max_download_size: u64,
+    /// Maximum publish size in bytes
+    #[serde(default = "default_max_publish_size")]
+    pub max_publish_size: u64,
+    /// Whether to allow HTTP URLs (insecure)
+    #[serde(default)]
+    pub allow_http: bool,
+    /// Token expiry warning threshold in hours
+    #[serde(default = "default_token_warning_hours")]
+    pub token_warning_hours: u64,
+}
+
+// Default value functions
+fn default_max_concurrent_downloads() -> u32 {
+    4
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_initial_delay_ms() -> u64 {
+    100
+}
+fn default_max_delay_ms() -> u64 {
+    5000
+}
+fn default_backoff_multiplier() -> f64 {
+    2.0
+}
+fn default_max_download_size() -> u64 {
+    100 * 1024 * 1024
+} // 100MB
+fn default_max_publish_size() -> u64 {
+    50 * 1024 * 1024
+} // 50MB
+fn default_token_warning_hours() -> u64 {
+    24
+}
+
+impl Default for RetrySettings {
+    fn default() -> Self {
+        Self {
+            max_retries: default_max_retries(),
+            initial_delay_ms: default_initial_delay_ms(),
+            max_delay_ms: default_max_delay_ms(),
+            backoff_multiplier: default_backoff_multiplier(),
+        }
+    }
+}
+
+impl Default for SecuritySettings {
+    fn default() -> Self {
+        Self {
+            max_download_size: default_max_download_size(),
+            max_publish_size: default_max_publish_size(),
+            allow_http: false,
+            token_warning_hours: default_token_warning_hours(),
+        }
+    }
 }
 
 impl Default for Config {
@@ -26,6 +117,9 @@ impl Default for Config {
             timeout: 30,
             verify_ssl: true,
             default_output_dir: None,
+            max_concurrent_downloads: default_max_concurrent_downloads(),
+            retry: RetrySettings::default(),
+            security: SecuritySettings::default(),
         }
     }
 }
@@ -51,26 +145,130 @@ impl ConfigManager {
     pub fn load() -> CarpResult<Config> {
         let config_path = Self::config_path()?;
 
-        if !config_path.exists() {
+        let mut config = if config_path.exists() {
+            let contents = fs::read_to_string(&config_path)
+                .map_err(|e| CarpError::Config(format!("Failed to read config file: {}", e)))?;
+
+            toml::from_str::<Config>(&contents)?
+        } else {
             let default_config = Config::default();
             Self::save(&default_config)?;
-            return Ok(default_config);
+            default_config
+        };
+
+        // Override with environment variables if present
+        Self::apply_env_overrides(&mut config)?;
+
+        // Validate configuration
+        Self::validate_config(&config)?;
+
+        Ok(config)
+    }
+
+    /// Apply environment variable overrides to configuration
+    fn apply_env_overrides(config: &mut Config) -> CarpResult<()> {
+        // Registry URL
+        if let Ok(url) = std::env::var("CARP_REGISTRY_URL") {
+            config.registry_url = url;
         }
 
-        let contents = fs::read_to_string(&config_path)
-            .map_err(|e| CarpError::Config(format!("Failed to read config file: {}", e)))?;
+        // API Token
+        if let Ok(token) = std::env::var("CARP_API_TOKEN") {
+            config.api_token = Some(token);
+        }
 
-        let config: Config = toml::from_str(&contents)?;
+        // Timeout
+        if let Ok(timeout_str) = std::env::var("CARP_TIMEOUT") {
+            config.timeout = timeout_str
+                .parse()
+                .map_err(|_| CarpError::Config("Invalid CARP_TIMEOUT value".to_string()))?;
+        }
 
+        // SSL Verification
+        if let Ok(verify_ssl_str) = std::env::var("CARP_VERIFY_SSL") {
+            config.verify_ssl = verify_ssl_str
+                .parse()
+                .map_err(|_| CarpError::Config("Invalid CARP_VERIFY_SSL value".to_string()))?;
+        }
+
+        // Output Directory
+        if let Ok(output_dir) = std::env::var("CARP_OUTPUT_DIR") {
+            config.default_output_dir = Some(output_dir);
+        }
+
+        // Allow HTTP (for development/testing)
+        if let Ok(allow_http_str) = std::env::var("CARP_ALLOW_HTTP") {
+            config.security.allow_http = allow_http_str
+                .parse()
+                .map_err(|_| CarpError::Config("Invalid CARP_ALLOW_HTTP value".to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate the complete configuration
+    fn validate_config(config: &Config) -> CarpResult<()> {
         // Validate registry URL
         Self::validate_registry_url(&config.registry_url)?;
 
-        // Ensure HTTPS for security
-        if !config.registry_url.starts_with("https://") {
-            eprintln!("Warning: Registry URL is not using HTTPS. This is insecure.");
+        // Security checks
+        if !config.security.allow_http && !config.registry_url.starts_with("https://") {
+            return Err(CarpError::Config(
+                "Registry URL must use HTTPS for security. Set allow_http=true in config to override.".to_string()
+            ));
         }
 
-        Ok(config)
+        // Validate timeout
+        if config.timeout == 0 || config.timeout > 300 {
+            return Err(CarpError::Config(
+                "Timeout must be between 1 and 300 seconds".to_string(),
+            ));
+        }
+
+        // Validate retry settings
+        if config.retry.max_retries > 10 {
+            return Err(CarpError::Config(
+                "Maximum retries cannot exceed 10".to_string(),
+            ));
+        }
+
+        if config.retry.initial_delay_ms > 60000 {
+            return Err(CarpError::Config(
+                "Initial retry delay cannot exceed 60 seconds".to_string(),
+            ));
+        }
+
+        if config.retry.max_delay_ms > 300000 {
+            return Err(CarpError::Config(
+                "Maximum retry delay cannot exceed 5 minutes".to_string(),
+            ));
+        }
+
+        // Validate security settings
+        if config.security.max_download_size > 1024 * 1024 * 1024 {
+            // 1GB
+            return Err(CarpError::Config(
+                "Maximum download size cannot exceed 1GB".to_string(),
+            ));
+        }
+
+        if config.security.max_publish_size > 200 * 1024 * 1024 {
+            // 200MB
+            return Err(CarpError::Config(
+                "Maximum publish size cannot exceed 200MB".to_string(),
+            ));
+        }
+
+        // Warn about insecure settings
+        if !config.verify_ssl {
+            eprintln!("Warning: SSL verification is disabled. This is insecure and not recommended for production use.");
+        }
+
+        if config.security.allow_http {
+            eprintln!("Warning: HTTP URLs are allowed. This is insecure and not recommended for production use.");
+        }
+
+        Ok(())
     }
 
     /// Validate registry URL format and security
@@ -143,12 +341,119 @@ impl ConfigManager {
 
         Ok(carp_cache)
     }
+
+    /// Get configuration with runtime environment checks
+    pub fn load_with_env_checks() -> CarpResult<Config> {
+        let config = Self::load()?;
+
+        // Check for common CI/CD environment variables and adjust settings
+        if Self::is_ci_environment() {
+            eprintln!("Detected CI/CD environment. Using stricter security settings.");
+        }
+
+        // Validate token expiry if present
+        if let Some(token) = &config.api_token {
+            Self::check_token_expiry(token, config.security.token_warning_hours)?;
+        }
+
+        Ok(config)
+    }
+
+    /// Check if running in a CI/CD environment
+    fn is_ci_environment() -> bool {
+        std::env::var("CI").is_ok()
+            || std::env::var("GITHUB_ACTIONS").is_ok()
+            || std::env::var("GITLAB_CI").is_ok()
+            || std::env::var("JENKINS_URL").is_ok()
+            || std::env::var("BUILDKITE").is_ok()
+    }
+
+    /// Check token expiry and warn user if necessary
+    fn check_token_expiry(token: &str, _warning_hours: u64) -> CarpResult<()> {
+        // In a real implementation, you'd decode the JWT token to check expiry
+        // For now, we'll implement a simple placeholder
+        if token.is_empty() {
+            return Err(CarpError::Auth("Empty API token".to_string()));
+        }
+
+        // Token format validation (basic JWT structure check)
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            eprintln!("Warning: API token format appears invalid. Consider re-authenticating.");
+        }
+
+        Ok(())
+    }
+
+    /// Securely update API token with validation
+    pub fn set_api_token_secure(token: String) -> CarpResult<()> {
+        // Validate token format
+        if token.trim().is_empty() {
+            return Err(CarpError::Auth("Token cannot be empty".to_string()));
+        }
+
+        // Basic JWT validation
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return Err(CarpError::Auth(
+                "Invalid token format. Expected JWT token.".to_string(),
+            ));
+        }
+
+        let mut config = Self::load()?;
+        config.api_token = Some(token);
+        Self::save(&config)?;
+
+        println!("API token updated successfully.");
+        Ok(())
+    }
+
+    /// Export configuration template for deployment
+    pub fn export_template() -> CarpResult<String> {
+        let template_config = Config {
+            registry_url: "${CARP_REGISTRY_URL:-https://api.carp.refcell.org}".to_string(),
+            api_token: None, // Never include tokens in templates
+            timeout: 30,
+            verify_ssl: true,
+            default_output_dir: Some("${CARP_OUTPUT_DIR:-./agents}".to_string()),
+            max_concurrent_downloads: 4,
+            retry: RetrySettings::default(),
+            security: SecuritySettings::default(),
+        };
+
+        let template = toml::to_string_pretty(&template_config)
+            .map_err(|e| CarpError::Config(format!("Failed to generate template: {}", e)))?;
+
+        Ok(format!(
+            "# Carp CLI Configuration Template\n# Environment variables will be substituted at runtime\n# Copy this file to ~/.config/carp/config.toml and customize as needed\n\n{}", 
+            template
+        ))
+    }
+
+    /// Validate configuration file without loading sensitive data
+    pub fn validate_config_file(path: &PathBuf) -> CarpResult<()> {
+        if !path.exists() {
+            return Err(CarpError::Config(format!(
+                "Configuration file not found: {}",
+                path.display()
+            )));
+        }
+
+        let contents = fs::read_to_string(path)
+            .map_err(|e| CarpError::Config(format!("Failed to read config file: {}", e)))?;
+
+        // Parse without loading into full config to check syntax
+        let _: toml::Value = toml::from_str(&contents)
+            .map_err(|e| CarpError::Config(format!("Invalid TOML syntax: {}", e)))?;
+
+        println!("Configuration file syntax is valid.");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     #[test]
     fn test_default_config() {

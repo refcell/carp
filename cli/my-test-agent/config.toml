@@ -1,0 +1,12 @@
+# Configuration for your Claude AI agent
+# Customize these settings as needed
+
+[agent]
+name = "My Agent"
+version = "0.1.0"
+debug = false
+
+[settings]
+# Add your agent-specific settings here
+timeout = 30
+max_retries = 3

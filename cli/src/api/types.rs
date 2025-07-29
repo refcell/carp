@@ -84,6 +84,35 @@ pub struct AuthResponse {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Request for uploading an agent via JSON
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UploadAgentRequest {
+    pub name: String,
+    pub description: String,
+    pub content: String,
+    pub version: Option<String>,
+    pub tags: Vec<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+}
+
+/// Response from uploading an agent
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UploadAgentResponse {
+    pub success: bool,
+    pub message: String,
+    pub agent: Option<Agent>,
+    pub validation_errors: Option<Vec<ValidationError>>,
+}
+
+/// Validation error details
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ValidationError {
+    pub field: String,
+    pub message: String,
+}
+
 /// Health check response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HealthResponse {

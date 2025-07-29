@@ -1,6 +1,6 @@
 /// End-to-End tests for the CLI application
 /// These tests simulate real user workflows and test the complete integration
-use mockito::{Mock, ServerGuard};
+use mockito::ServerGuard;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -10,7 +10,6 @@ use tempfile::TempDir;
 // Test utilities for E2E testing
 mod e2e_utils {
     use super::*;
-    use std::env;
 
     pub struct E2ETestContext {
         pub temp_dir: TempDir,
@@ -22,7 +21,7 @@ mod e2e_utils {
     impl E2ETestContext {
         pub async fn new() -> Self {
             let temp_dir = TempDir::new().expect("Failed to create temp dir");
-            let mut server = mockito::Server::new_async().await;
+            let server = mockito::Server::new_async().await;
 
             // Create a test config file
             let config_path = temp_dir.path().join("config.toml");
@@ -47,7 +46,7 @@ verify_ssl = false
             }
         }
 
-        fn find_cli_binary() -> PathBuf {
+        pub fn find_cli_binary() -> PathBuf {
             // First try in target/debug
             let debug_path = PathBuf::from("target/debug/carp");
             if debug_path.exists() {
