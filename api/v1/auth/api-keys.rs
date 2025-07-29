@@ -5,8 +5,167 @@ use std::env;
 use uuid::Uuid;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
-mod shared;
-use shared::{authenticate_request, check_scope, ApiError, forbidden_error};
+// Since this is a Vercel serverless function, include auth functions directly
+use sha2::{Digest, Sha256};
+
+/// User context extracted from authenticated API key
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthenticatedUser {
+    pub user_id: Uuid,
+    pub key_id: Uuid,
+    pub scopes: Vec<String>,
+}
+
+/// API error response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiError {
+    pub error: String,
+    pub message: String,
+    pub details: Option<serde_json::Value>,
+}
+
+/// Extract API key from request headers
+fn extract_api_key(req: &Request) -> Option<String> {
+    let headers = req.headers();
+    
+    // Try Authorization header first
+    if let Some(auth_header) = headers.get("authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                return Some(token.to_string());
+            }
+        }
+    }
+    
+    // Try X-API-Key header
+    if let Some(api_key_header) = headers.get("x-api-key") {
+        if let Ok(key_str) = api_key_header.to_str() {
+            return Some(key_str.to_string());
+        }
+    }
+    
+    None
+}
+
+/// Hash an API key using SHA-256
+fn hash_api_key(key: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(key.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Authenticate a request using API key
+async fn authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiError> {
+    let api_key = extract_api_key(req).ok_or_else(|| ApiError {
+        error: "missing_api_key".to_string(),
+        message: "API key is required".to_string(),
+        details: None,
+    })?;
+
+    let key_hash = hash_api_key(&api_key);
+    
+    // Get database credentials
+    let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
+    let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
+
+    if supabase_url.is_empty() || supabase_key.is_empty() {
+        // Return mock user for development
+        return Ok(AuthenticatedUser {
+            user_id: Uuid::new_v4(),
+            key_id: Uuid::new_v4(),
+            scopes: vec!["read".to_string(), "write".to_string(), "admin".to_string()],
+        });
+    }
+
+    let client = reqwest::Client::new();
+    
+    // Verify API key using the database function
+    let response = client
+        .post(&format!("{}/rest/v1/rpc/verify_api_key", supabase_url))
+        .header("apikey", &supabase_key)
+        .header("Authorization", format!("Bearer {}", supabase_key))
+        .header("Content-Type", "application/json")
+        .json(&json!({ "key_hash_param": key_hash }))
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            error: "database_error".to_string(),
+            message: format!("Failed to verify API key: {}", e),
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        return Err(ApiError {
+            error: "invalid_api_key".to_string(),
+            message: "Invalid or expired API key".to_string(),
+            details: None,
+        });
+    }
+
+    let verification_result: serde_json::Value = response.json().await.map_err(|e| ApiError {
+        error: "parse_error".to_string(),
+        message: format!("Failed to parse verification response: {}", e),
+        details: None,
+    })?;
+
+    // Extract user info from verification result
+    if let Some(result) = verification_result.as_array().and_then(|arr| arr.first()) {
+        if let (Some(user_id), Some(key_id), Some(is_valid)) = (
+            result.get("user_id").and_then(|v| v.as_str()),
+            result.get("key_id").and_then(|v| v.as_str()),
+            result.get("is_valid").and_then(|v| v.as_bool()),
+        ) {
+            if is_valid {
+                let scopes = result
+                    .get("scopes")
+                    .and_then(|s| s.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_else(|| vec!["read".to_string()]);
+
+                return Ok(AuthenticatedUser {
+                    user_id: Uuid::parse_str(user_id).map_err(|_| ApiError {
+                        error: "invalid_user_id".to_string(),
+                        message: "Invalid user ID format".to_string(),
+                        details: None,
+                    })?,
+                    key_id: Uuid::parse_str(key_id).map_err(|_| ApiError {
+                        error: "invalid_key_id".to_string(),
+                        message: "Invalid key ID format".to_string(),
+                        details: None,
+                    })?,
+                    scopes,
+                });
+            }
+        }
+    }
+
+    Err(ApiError {
+        error: "invalid_api_key".to_string(),
+        message: "Invalid or expired API key".to_string(),
+        details: None,
+    })
+}
+
+/// Check if user has required scope
+fn check_scope(user: &AuthenticatedUser, required_scope: &str) -> bool {
+    user.scopes.contains(&required_scope.to_string()) || user.scopes.contains(&"admin".to_string())
+}
+
+/// Create a 403 forbidden error response
+fn forbidden_error(message: &str) -> Response<Body> {
+    Response::builder()
+        .status(403)
+        .header("content-type", "application/json")
+        .body(json!({
+            "error": "Forbidden",
+            "message": message
+        }).to_string().into())
+        .unwrap()
+}
 
 /// API key information (without the actual key)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,7 +243,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
 }
 
 async fn list_api_keys(
-    authenticated_user: &shared::AuthenticatedUser,
+    authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
@@ -147,7 +306,7 @@ async fn list_api_keys(
 
 async fn create_api_key(
     req: &Request,
-    authenticated_user: &shared::AuthenticatedUser,
+    authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
     // Parse request body
     let body_bytes = req.body();
@@ -281,7 +440,7 @@ async fn create_api_key(
 
 async fn update_api_key(
     req: &Request,
-    authenticated_user: &shared::AuthenticatedUser,
+    authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
     // Extract key ID from query parameters
     let query = req.uri().query().unwrap_or("");
@@ -350,7 +509,7 @@ async fn update_api_key(
 
 async fn delete_api_key(
     req: &Request,
-    authenticated_user: &shared::AuthenticatedUser,
+    authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
     // Extract key ID from query parameters
     let query = req.uri().query().unwrap_or("");
@@ -447,10 +606,3 @@ fn generate_api_key() -> String {
     format!("carp_{}_{}_{}",part1, part2, part3)
 }
 
-/// Hash API key using SHA-256
-fn hash_api_key(api_key: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(api_key.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
