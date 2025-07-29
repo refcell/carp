@@ -9,9 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Edit, Trash2, Plus, X } from 'lucide-react';
+import { Edit, Trash2, Plus, X, Key } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
+import { ApiKeyManagementModal } from '@/components/ApiKeyManagementModal';
 
 export default function Profile() {
   const { user } = useAuth();
@@ -144,21 +145,31 @@ export default function Profile() {
         {/* Profile Header */}
         <Card className="mb-8">
           <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <Avatar className="w-20 h-20">
-                <AvatarImage src={user.user_metadata?.avatar_url} />
-                <AvatarFallback className="text-2xl">
-                  {user.user_metadata?.user_name?.[0]?.toUpperCase() || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {user.user_metadata?.full_name || user.user_metadata?.user_name}
-                </h1>
-                <p className="text-muted-foreground">@{user.user_metadata?.user_name}</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {userAgents.length} agent{userAgents.length !== 1 ? 's' : ''} published
-                </p>
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-4">
+                <Avatar className="w-20 h-20">
+                  <AvatarImage src={user.user_metadata?.avatar_url} />
+                  <AvatarFallback className="text-2xl">
+                    {user.user_metadata?.user_name?.[0]?.toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h1 className="text-2xl font-bold">
+                    {user.user_metadata?.full_name || user.user_metadata?.user_name}
+                  </h1>
+                  <p className="text-muted-foreground">@{user.user_metadata?.user_name}</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {userAgents.length} agent{userAgents.length !== 1 ? 's' : ''} published
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <ApiKeyManagementModal>
+                  <Button variant="outline" size="sm">
+                    <Key className="w-4 h-4 mr-2" />
+                    Manage API Keys
+                  </Button>
+                </ApiKeyManagementModal>
               </div>
             </div>
           </CardContent>

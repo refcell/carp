@@ -18,9 +18,9 @@ pub struct AgentFile {
 }
 
 /// Execute the upload command
-pub async fn execute(directory: Option<String>, verbose: bool) -> CarpResult<()> {
-    // Ensure user is authenticated
-    AuthManager::ensure_authenticated().await?;
+pub async fn execute(directory: Option<String>, api_key: Option<String>, verbose: bool) -> CarpResult<()> {
+    // Ensure user is authenticated (either via API key parameter or stored configuration)
+    AuthManager::ensure_authenticated(api_key.as_deref()).await?;
 
     // Expand directory path, defaulting to ~/.claude/agents/
     let dir_path = expand_directory_path(directory)?;
@@ -59,7 +59,7 @@ pub async fn execute(directory: Option<String>, verbose: bool) -> CarpResult<()>
     let agent_content = fs::read_to_string(&selected_agent.path)?;
 
     // Upload the agent
-    upload_agent(&selected_agent, agent_content, verbose).await?;
+    upload_agent(&selected_agent, agent_content, api_key, verbose).await?;
 
     println!(
         "{} Successfully uploaded agent '{}'",
@@ -223,7 +223,7 @@ fn select_agent(agents: Vec<AgentFile>) -> CarpResult<AgentFile> {
 }
 
 /// Upload the selected agent to the registry
-async fn upload_agent(agent: &AgentFile, content: String, verbose: bool) -> CarpResult<()> {
+async fn upload_agent(agent: &AgentFile, content: String, api_key: Option<String>, verbose: bool) -> CarpResult<()> {
     if verbose {
         println!("Preparing to upload agent '{}'...", agent.name);
     }
@@ -242,7 +242,7 @@ async fn upload_agent(agent: &AgentFile, content: String, verbose: bool) -> Carp
 
     // Upload to registry
     let config = ConfigManager::load_with_env_checks()?;
-    let client = ApiClient::new(&config)?;
+    let client = ApiClient::new(&config)?.with_api_key(api_key);
 
     if verbose {
         println!("Uploading to registry...");

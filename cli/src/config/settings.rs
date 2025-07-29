@@ -4,11 +4,14 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Configuration structure for the Carp CLI
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Registry API base URL
     pub registry_url: String,
-    /// User API token for authentication
+    /// User API key for authentication
+    pub api_key: Option<String>,
+    /// Legacy API token field (deprecated, use api_key instead)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub api_token: Option<String>,
     /// Default timeout for API requests in seconds
     pub timeout: u64,
@@ -109,10 +112,27 @@ impl Default for SecuritySettings {
     }
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("registry_url", &self.registry_url)
+            .field("api_key", &self.api_key.as_ref().map(|_| "***"))
+            .field("api_token", &self.api_token.as_ref().map(|_| "***"))
+            .field("timeout", &self.timeout)
+            .field("verify_ssl", &self.verify_ssl)
+            .field("default_output_dir", &self.default_output_dir)
+            .field("max_concurrent_downloads", &self.max_concurrent_downloads)
+            .field("retry", &self.retry)
+            .field("security", &self.security)
+            .finish()
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             registry_url: "https://api.carp.refcell.org".to_string(),
+            api_key: None,
             api_token: None,
             timeout: 30,
             verify_ssl: true,
@@ -159,10 +179,28 @@ impl ConfigManager {
         // Override with environment variables if present
         Self::apply_env_overrides(&mut config)?;
 
+        // Handle backward compatibility: migrate api_token to api_key
+        Self::migrate_legacy_token(&mut config)?;
+
         // Validate configuration
         Self::validate_config(&config)?;
 
         Ok(config)
+    }
+
+    /// Migrate legacy api_token to api_key for backward compatibility
+    fn migrate_legacy_token(config: &mut Config) -> CarpResult<()> {
+        // If we have an api_token but no api_key, migrate it
+        if config.api_key.is_none() && config.api_token.is_some() {
+            config.api_key = config.api_token.take();
+            // Save the migrated config
+            if let Err(e) = Self::save(config) {
+                eprintln!("Warning: Failed to save migrated configuration: {}", e);
+            } else {
+                eprintln!("Info: Migrated api_token to api_key in configuration file.");
+            }
+        }
+        Ok(())
     }
 
     /// Apply environment variable overrides to configuration
@@ -172,9 +210,14 @@ impl ConfigManager {
             config.registry_url = url;
         }
 
-        // API Token
-        if let Ok(token) = std::env::var("CARP_API_TOKEN") {
-            config.api_token = Some(token);
+        // API Key (new environment variable)
+        if let Ok(api_key) = std::env::var("CARP_API_KEY") {
+            config.api_key = Some(api_key);
+        }
+        // API Token (legacy environment variable for backward compatibility)
+        else if let Ok(api_token) = std::env::var("CARP_API_TOKEN") {
+            eprintln!("Warning: CARP_API_TOKEN is deprecated. Please use CARP_API_KEY instead.");
+            config.api_key = Some(api_token);
         }
 
         // Timeout
@@ -315,18 +358,32 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// Update the API token in the config
-    pub fn set_api_token(token: String) -> CarpResult<()> {
+    /// Update the API key in the config
+    pub fn set_api_key(api_key: String) -> CarpResult<()> {
         let mut config = Self::load()?;
-        config.api_token = Some(token);
+        config.api_key = Some(api_key);
+        config.api_token = None; // Clear legacy token
         Self::save(&config)
     }
 
-    /// Clear the API token from the config
-    pub fn clear_api_token() -> CarpResult<()> {
+    /// Clear the API key from the config
+    pub fn clear_api_key() -> CarpResult<()> {
         let mut config = Self::load()?;
-        config.api_token = None;
+        config.api_key = None;
+        config.api_token = None; // Also clear legacy token
         Self::save(&config)
+    }
+
+    /// Legacy method for backward compatibility
+    #[deprecated(note = "Use set_api_key instead")]
+    pub fn set_api_token(token: String) -> CarpResult<()> {
+        Self::set_api_key(token)
+    }
+
+    /// Legacy method for backward compatibility
+    #[deprecated(note = "Use clear_api_key instead")]
+    pub fn clear_api_token() -> CarpResult<()> {
+        Self::clear_api_key()
     }
 
     /// Get the cache directory for storing downloaded agents
@@ -351,9 +408,9 @@ impl ConfigManager {
             eprintln!("Detected CI/CD environment. Using stricter security settings.");
         }
 
-        // Validate token expiry if present
-        if let Some(token) = &config.api_token {
-            Self::check_token_expiry(token, config.security.token_warning_hours)?;
+        // Validate API key if present
+        if let Some(api_key) = &config.api_key {
+            Self::validate_api_key(api_key)?;
         }
 
         Ok(config)
@@ -368,51 +425,56 @@ impl ConfigManager {
             || std::env::var("BUILDKITE").is_ok()
     }
 
-    /// Check token expiry and warn user if necessary
-    fn check_token_expiry(token: &str, _warning_hours: u64) -> CarpResult<()> {
-        // In a real implementation, you'd decode the JWT token to check expiry
-        // For now, we'll implement a simple placeholder
-        if token.is_empty() {
-            return Err(CarpError::Auth("Empty API token".to_string()));
+    /// Validate API key format and basic security checks
+    pub fn validate_api_key(api_key: &str) -> CarpResult<()> {
+        if api_key.is_empty() {
+            return Err(CarpError::Auth("Empty API key".to_string()));
         }
 
-        // Token format validation (basic JWT structure check)
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            eprintln!("Warning: API token format appears invalid. Consider re-authenticating.");
+        // Basic API key format validation
+        if api_key.len() < 8 {
+            return Err(CarpError::Auth("API key too short (minimum 8 characters)".to_string()));
+        }
+
+        // Check for potentially unsafe characters
+        if api_key.contains(['\n', '\r', '\t', ' ']) {
+            return Err(CarpError::Auth("API key contains invalid characters".to_string()));
+        }
+
+        // Warn about potentially insecure keys
+        if api_key.starts_with("test_") || api_key.starts_with("dev_") {
+            eprintln!("Warning: API key appears to be for development/testing. Ensure you're using a production key for live environments.");
         }
 
         Ok(())
     }
 
-    /// Securely update API token with validation
-    pub fn set_api_token_secure(token: String) -> CarpResult<()> {
-        // Validate token format
-        if token.trim().is_empty() {
-            return Err(CarpError::Auth("Token cannot be empty".to_string()));
-        }
-
-        // Basic JWT validation
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            return Err(CarpError::Auth(
-                "Invalid token format. Expected JWT token.".to_string(),
-            ));
-        }
+    /// Securely update API key with validation
+    pub fn set_api_key_secure(api_key: String) -> CarpResult<()> {
+        // Validate API key format
+        Self::validate_api_key(&api_key)?;
 
         let mut config = Self::load()?;
-        config.api_token = Some(token);
+        config.api_key = Some(api_key);
+        config.api_token = None; // Clear legacy token
         Self::save(&config)?;
 
-        println!("API token updated successfully.");
+        println!("API key updated successfully.");
         Ok(())
+    }
+
+    /// Legacy method for backward compatibility
+    #[deprecated(note = "Use set_api_key_secure instead")]
+    pub fn set_api_token_secure(token: String) -> CarpResult<()> {
+        Self::set_api_key_secure(token)
     }
 
     /// Export configuration template for deployment
     pub fn export_template() -> CarpResult<String> {
         let template_config = Config {
             registry_url: "${CARP_REGISTRY_URL:-https://api.carp.refcell.org}".to_string(),
-            api_token: None, // Never include tokens in templates
+            api_key: None, // Never include API keys in templates
+            api_token: None, // Never include legacy tokens in templates
             timeout: 30,
             verify_ssl: true,
             default_output_dir: Some("${CARP_OUTPUT_DIR:-./agents}".to_string()),
@@ -425,7 +487,7 @@ impl ConfigManager {
             .map_err(|e| CarpError::Config(format!("Failed to generate template: {}", e)))?;
 
         Ok(format!(
-            "# Carp CLI Configuration Template\n# Environment variables will be substituted at runtime\n# Copy this file to ~/.config/carp/config.toml and customize as needed\n\n{}", 
+            "# Carp CLI Configuration Template\n# Environment variables will be substituted at runtime\n# Copy this file to ~/.config/carp/config.toml and customize as needed\n# Set CARP_API_KEY environment variable or add api_key field for authentication\n\n{}", 
             template
         ))
     }

@@ -8,6 +8,7 @@ mod commands;
 mod config;
 mod utils;
 
+use auth::AuthManager;
 use commands::{healthcheck, pull, search, upload};
 use utils::error::CarpResult;
 
@@ -27,6 +28,9 @@ struct Cli {
 
     #[arg(long, global = true, help = "Suppress all output except errors")]
     quiet: bool,
+
+    #[arg(long, global = true, env = "CARP_API_KEY", hide_env_values = true, help = "API key for authentication (can also be set via CARP_API_KEY environment variable)")]
+    api_key: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -68,6 +72,24 @@ enum Commands {
         )]
         directory: Option<String>,
     },
+
+    /// Authentication commands
+    Auth {
+        #[command(subcommand)]
+        auth_command: AuthCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuthCommands {
+    /// Set API key for authentication
+    SetApiKey,
+    /// Show authentication status
+    Status,
+    /// Clear stored API key (logout)
+    Logout,
+    /// Legacy login command (deprecated)
+    Login,
 }
 
 #[tokio::main]
@@ -93,6 +115,14 @@ async fn run(cli: Cli) -> CarpResult<()> {
             output,
             force,
         } => pull::execute(agent, output, force, cli.verbose).await,
-        Commands::Upload { directory } => upload::execute(directory, cli.verbose).await,
+        Commands::Upload { directory } => upload::execute(directory, cli.api_key, cli.verbose).await,
+        Commands::Auth { auth_command } => {
+            match auth_command {
+                AuthCommands::SetApiKey => AuthManager::set_api_key().await,
+                AuthCommands::Status => AuthManager::status_with_key(cli.api_key.as_deref()).await,
+                AuthCommands::Logout => AuthManager::logout().await,
+                AuthCommands::Login => AuthManager::login().await,
+            }
+        }
     }
 }

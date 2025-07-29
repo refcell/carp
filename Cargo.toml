@@ -26,6 +26,14 @@ path = "api/v1/agents/publish.rs"
 name = "v1-auth-login"
 path = "api/v1/auth/login.rs"
 
+[[bin]]
+name = "v1-agents-upload"
+path = "api/v1/agents/upload.rs"
+
+[[bin]]
+name = "v1-auth-api-keys"
+path = "api/v1/auth/api-keys.rs"
+
 [dependencies]
 # Vercel runtime for serverless functions
 vercel_runtime = "1.0"
@@ -69,6 +77,9 @@ dotenvy = "0.15"
 
 # URL encoding
 urlencoding = "2.1"
+
+# YAML parsing
+serde_yaml = "0.9"
 
 [profile.release]
 lto = true

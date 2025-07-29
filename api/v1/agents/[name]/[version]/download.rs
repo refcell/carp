@@ -5,6 +5,9 @@ use serde_json::json;
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
+mod shared;
+use shared::{authenticate_request, check_scope, ApiError};
+
 /// Agent download information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AgentDownload {
@@ -15,13 +18,7 @@ pub struct AgentDownload {
     pub size: u64,
 }
 
-/// API error response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ApiError {
-    pub error: String,
-    pub message: String,
-    pub details: Option<serde_json::Value>,
-}
+// ApiError is now imported from shared module
 
 /// Supabase storage response for signed URLs
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +33,13 @@ async fn main() -> Result<(), Error> {
 }
 
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
+    // Optional authentication - if API key is provided, validate it
+    // This allows both authenticated and unauthenticated access
+    let authenticated_user = match authenticate_request(&req).await {
+        Ok(user) => Some(user),
+        Err(_) => None, // Allow unauthenticated access for public packages
+    };
+
     // Extract path parameters from URL path
     let path = req.uri().path();
     let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
@@ -60,7 +64,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         .map_err(|_| Error::from("Invalid version encoding"))?;
 
     // Get agent download info from database
-    match get_agent_download_info(&agent_name, &version, &req).await {
+    match get_agent_download_info(&agent_name, &version, &req, authenticated_user.as_ref()).await {
         Ok(download_info) => Ok(Response::builder()
             .status(200)
             .header("content-type", "application/json")
@@ -86,6 +90,7 @@ async fn get_agent_download_info(
     name: &str,
     version: &str,
     req: &Request,
+    authenticated_user: Option<&shared::AuthenticatedUser>,
 ) -> AnyhowResult<AgentDownload> {
     // Get database connection parameters
     let supabase_url = env::var("SUPABASE_URL")
@@ -96,7 +101,7 @@ async fn get_agent_download_info(
     let client = reqwest::Client::new();
 
     // Query the database for agent information
-    let agent_info = query_agent_info(&client, &supabase_url, &supabase_key, name, version).await?;
+    let agent_info = query_agent_info(&client, &supabase_url, &supabase_key, name, version, authenticated_user).await?;
 
     // Generate signed URL for download
     let download_url =
@@ -129,12 +134,14 @@ async fn query_agent_info(
     supabase_key: &str,
     name: &str,
     version: &str,
+    authenticated_user: Option<&shared::AuthenticatedUser>,
 ) -> AnyhowResult<AgentInfo> {
     let url = format!("{}/rest/v1/rpc/get_agent_download_info", supabase_url);
 
     let payload = json!({
         "p_agent_name": name,
-        "p_version_text": if version == "latest" { "" } else { version }
+        "p_version_text": if version == "latest" { "" } else { version },
+        "p_user_id": authenticated_user.map(|u| u.user_id.to_string())
     });
 
     let response = client
@@ -155,6 +162,23 @@ async fn query_agent_info(
 
     // Parse the result from the database function
     if let Some(data) = result.as_array().and_then(|arr| arr.first()) {
+        // Check if the agent is private and user has access
+        let is_public = data.get("is_public").and_then(|v| v.as_bool()).unwrap_or(true);
+        let owner_id = data.get("user_id").and_then(|v| v.as_str());
+        
+        if !is_public {
+            match authenticated_user {
+                Some(user) => {
+                    let user_id_str = user.user_id.to_string();
+                    if Some(user_id_str.as_str()) != owner_id && !check_scope(user, "admin") {
+                        return Err(anyhow!("Access denied: This agent is private"));
+                    }
+                }
+                None => {
+                    return Err(anyhow!("Authentication required: This agent is private"));
+                }
+            }
+        }
         Ok(AgentInfo {
             name: data
                 .get("agent_name")

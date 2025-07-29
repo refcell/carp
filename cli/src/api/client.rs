@@ -29,7 +29,7 @@ impl Default for RetryConfig {
 pub struct ApiClient {
     client: Client,
     base_url: String,
-    api_token: Option<String>,
+    api_key: Option<String>,
     retry_config: RetryConfig,
 }
 
@@ -69,9 +69,21 @@ impl ApiClient {
         Ok(Self {
             client,
             base_url: base_url.to_string(),
-            api_token: config.api_token.clone(),
+            api_key: config.api_key.clone(),
             retry_config,
         })
+    }
+
+    /// Set API key at runtime (overrides config)
+    pub fn with_api_key(mut self, api_key: Option<String>) -> Self {
+        // Validate API key if provided
+        if let Some(ref key) = api_key {
+            if let Err(e) = crate::config::ConfigManager::validate_api_key(key) {
+                eprintln!("Warning: Invalid API key format: {}", e);
+            }
+        }
+        self.api_key = api_key;
+        self
     }
 
     /// Search for agents in the registry
@@ -197,8 +209,8 @@ impl ApiClient {
 
     /// Upload an agent to the registry via JSON
     pub async fn upload(&self, request: UploadAgentRequest) -> CarpResult<UploadAgentResponse> {
-        let token = self.api_token.as_ref().ok_or_else(|| {
-            CarpError::Auth("No API token configured. Please login first.".to_string())
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            CarpError::Auth("No API key configured. Please set your API key via command line, environment variable, or config file.".to_string())
         })?;
 
         // Validate upload request
@@ -210,7 +222,7 @@ impl ApiClient {
             let response = self
                 .client
                 .post(&url)
-                .header("Authorization", format!("Bearer {token}"))
+                .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")
                 .json(&request)
                 .send()
@@ -241,8 +253,8 @@ impl ApiClient {
         request: PublishRequest,
         content: Vec<u8>,
     ) -> CarpResult<PublishResponse> {
-        let token = self.api_token.as_ref().ok_or_else(|| {
-            CarpError::Auth("No API token configured. Please login first.".to_string())
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            CarpError::Auth("No API key configured. Please set your API key via command line, environment variable, or config file.".to_string())
         })?;
 
         // Validate publish request
@@ -278,7 +290,7 @@ impl ApiClient {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {token}"))
+            .header("Authorization", format!("Bearer {api_key}"))
             .multipart(form)
             .send()
             .await?;
@@ -621,6 +633,28 @@ impl ApiClient {
         if status.is_success() {
             serde_json::from_str(&text).map_err(|e| CarpError::Json(e))
         } else {
+            // Handle specific authentication errors with helpful messages
+            if status.as_u16() == 401 {
+                let auth_error = if text.contains("invalid") || text.contains("expired") {
+                    "Invalid or expired API key. Please check your API key and try again."
+                } else if text.contains("missing") || text.contains("required") {
+                    "API key required. Please provide your API key via --api-key option, CARP_API_KEY environment variable, or config file."
+                } else {
+                    "Authentication failed. Please verify your API key is correct."
+                };
+                
+                return Err(CarpError::Auth(format!(
+                    "{}\n\nTo fix this:\n  1. Get your API key from the registry dashboard\n  2. Set it via: carp auth set-api-key\n  3. Or use: --api-key <your-key>\n  4. Or set CARP_API_KEY environment variable",
+                    auth_error
+                )));
+            }
+
+            if status.as_u16() == 403 {
+                return Err(CarpError::Auth(
+                    "Access forbidden. Your API key may not have sufficient permissions for this operation.".to_string()
+                ));
+            }
+
             // Try to parse as API error, fallback to generic error
             match serde_json::from_str::<ApiError>(&text) {
                 Ok(api_error) => Err(CarpError::Api {
@@ -646,10 +680,11 @@ mod tests {
     use crate::config::Config;
     use mockito::Server;
 
-    fn create_test_config(server_url: String, api_token: Option<String>) -> Config {
+    fn create_test_config(server_url: String, api_key: Option<String>) -> Config {
         Config {
             registry_url: server_url,
-            api_token,
+            api_key,
+            api_token: None,
             timeout: 30,
             verify_ssl: true,
             default_output_dir: None,
@@ -895,7 +930,7 @@ description: A test agent
         let result = client.upload(request).await;
         assert!(result.is_err());
         if let Err(CarpError::Auth(msg)) = result {
-            assert!(msg.contains("No API token configured"));
+            assert!(msg.contains("No API key configured"));
         } else {
             panic!("Expected Auth error");
         }
