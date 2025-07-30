@@ -383,7 +383,7 @@ async fn create_api_key(
         "user_id": authenticated_user.user_id,
         "name": create_request.name,
         "key_hash": key_hash,
-        "prefix": prefix,
+        "key_prefix": prefix,
         "scopes": create_request.scopes,
         "expires_at": create_request.expires_at
     });

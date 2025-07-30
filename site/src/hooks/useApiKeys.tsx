@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { Tables } from '@/integrations/supabase/types';
+import { getApiBaseUrl, API_ENDPOINTS, createAuthenticatedFetch, ApiRequestError } from '@/lib/api-config';
 
 export interface ApiKey {
   id: string;
@@ -12,103 +11,102 @@ export interface ApiKey {
   last_used_at: string | null;
   expires_at: string | null;
   created_at: string;
-  updated_at: string;
-  user_id: string;
 }
 
 export interface ApiKeyWithSecret extends ApiKey {
   full_key: string;
 }
 
+export interface CreateApiKeyRequest {
+  name: string;
+  scopes: string[];
+  expires_at?: string | null;
+}
+
+export interface CreateApiKeyResponse {
+  key: string;
+  info: ApiKey;
+}
+
 export function useApiKeys() {
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, session } = useAuth();
 
-  // Generate a cryptographically secure API key
-  const generateApiKey = useCallback(() => {
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    const key = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-    return `carp_${key}`;
-  }, []);
+  // Create an authenticated fetch request
+  const authenticatedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    // For now, we'll use the Supabase JWT token as a fallback
+    // In a full implementation, this should use an existing API key
+    // This creates a bootstrap problem that needs to be addressed separately
+    const token = session?.access_token;
+    
+    if (!token) {
+      throw new Error('No authentication token available');
+    }
 
-  // Hash an API key for storage (simplified - in production use proper hashing)
-  const hashApiKey = useCallback((key: string) => {
-    // In production, use bcrypt or similar
-    // For now, we'll use a simple hash approach
-    return btoa(key).replace(/=/g, '');
-  }, []);
-
-  // Get the prefix from a full API key
-  const getKeyPrefix = useCallback((key: string) => {
-    return key.substring(0, 12); // "carp_" + first 8 characters
-  }, []);
+    const fetchFn = createAuthenticatedFetch(token);
+    return fetchFn(url, options);
+  }, [session]);
 
   // Fetch user's API keys
   const fetchApiKeys = useCallback(async (): Promise<ApiKey[]> => {
-    if (!user) return [];
+    if (!user || !session) return [];
     
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('api_keys')
-        .select('id, name, prefix, scopes, is_active, last_used_at, expires_at, created_at, updated_at, user_id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error fetching API keys:', error);
-        return [];
-      }
-      
-      return data as ApiKey[];
+      const apiUrl = getApiBaseUrl();
+      const response = await authenticatedFetch(`${apiUrl}${API_ENDPOINTS.API_KEYS}`);
+      const apiKeys: ApiKey[] = await response.json();
+      return apiKeys;
     } catch (error) {
       console.error('Error fetching API keys:', error);
+      if (error instanceof ApiRequestError) {
+        // Handle specific API errors if needed
+        console.error('API Error:', error.apiError);
+      }
       return [];
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, session, getApiBaseUrl, authenticatedFetch]);
 
   // Create a new API key
-  const createApiKey = useCallback(async (name?: string): Promise<ApiKeyWithSecret | null> => {
+  const createApiKey = useCallback(async (name: string, scopes: string[] = ['read'], expiresAt?: string | null): Promise<ApiKeyWithSecret | null> => {
     if (!user) throw new Error('Must be logged in to create API keys');
     
     setLoading(true);
     try {
-      const fullKey = generateApiKey();
-      const hashedKey = hashApiKey(fullKey);
-      const prefix = getKeyPrefix(fullKey);
+      const apiUrl = getApiBaseUrl();
+      const requestBody: CreateApiKeyRequest = {
+        name: name || 'Unnamed Key',
+        scopes,
+        expires_at: expiresAt,
+      };
       
-      const { data, error } = await supabase
-        .from('api_keys')
-        .insert([{
-          name: name || 'Unnamed Key',
-          key_hash: hashedKey,
-          prefix: prefix,
-          user_id: user.id,
-          scopes: ['read'], // Default scopes
-          is_active: true
-        }])
-        .select('id, name, prefix, scopes, is_active, last_used_at, expires_at, created_at, updated_at, user_id')
-        .single();
+      const response = await authenticatedFetch(
+        `${apiUrl}${API_ENDPOINTS.API_KEYS}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(requestBody),
+        }
+      );
       
-      if (error) {
-        console.error('Error creating API key:', error);
-        throw error;
-      }
+      const result: CreateApiKeyResponse = await response.json();
       
       return {
-        ...data,
-        full_key: fullKey
+        ...result.info,
+        full_key: result.key
       } as ApiKeyWithSecret;
     } catch (error) {
       console.error('Error creating API key:', error);
+      // Re-throw ApiRequestError to preserve error details
+      if (error instanceof ApiRequestError) {
+        throw new Error(error.apiError.message);
+      }
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [user, generateApiKey, hashApiKey, getKeyPrefix]);
+  }, [user, getApiBaseUrl, authenticatedFetch]);
 
   // Delete an API key
   const deleteApiKey = useCallback(async (keyId: string): Promise<void> => {
@@ -116,53 +114,56 @@ export function useApiKeys() {
     
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('api_keys')
-        .delete()
-        .eq('id', keyId)
-        .eq('user_id', user.id);
-      
-      if (error) {
-        console.error('Error deleting API key:', error);
-        throw error;
-      }
+      const apiUrl = getApiBaseUrl();
+      await authenticatedFetch(
+        `${apiUrl}${API_ENDPOINTS.API_KEYS}?id=${keyId}`,
+        {
+          method: 'DELETE',
+        }
+      );
     } catch (error) {
       console.error('Error deleting API key:', error);
+      // Re-throw ApiRequestError to preserve error details
+      if (error instanceof ApiRequestError) {
+        throw new Error(error.apiError.message);
+      }
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getApiBaseUrl, authenticatedFetch]);
 
-  // Update an API key's name
-  const updateApiKeyName = useCallback(async (keyId: string, name: string): Promise<void> => {
+  // Update an API key (name, scopes, etc.)
+  const updateApiKey = useCallback(async (keyId: string, updates: { name?: string; scopes?: string[]; is_active?: boolean }): Promise<void> => {
     if (!user) throw new Error('Must be logged in to update API keys');
     
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('api_keys')
-        .update({ name })
-        .eq('id', keyId)
-        .eq('user_id', user.id);
-      
-      if (error) {
-        console.error('Error updating API key:', error);
-        throw error;
-      }
+      const apiUrl = getApiBaseUrl();
+      await authenticatedFetch(
+        `${apiUrl}${API_ENDPOINTS.API_KEYS}?id=${keyId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        }
+      );
     } catch (error) {
       console.error('Error updating API key:', error);
+      // Re-throw ApiRequestError to preserve error details
+      if (error instanceof ApiRequestError) {
+        throw new Error(error.apiError.message);
+      }
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getApiBaseUrl, authenticatedFetch]);
 
   return {
     loading,
     fetchApiKeys,
     createApiKey,
     deleteApiKey,
-    updateApiKeyName
+    updateApiKey
   };
 }

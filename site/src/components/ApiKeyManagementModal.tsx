@@ -9,6 +9,8 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Key, Copy, Trash2, Plus, Eye, EyeOff, Calendar } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface ApiKeyManagementModalProps {
   children: React.ReactNode;
@@ -24,6 +26,16 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
   const [isCreating, setIsCreating] = useState(false);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<ApiKeyWithSecret | null>(null);
   const [showNewKey, setShowNewKey] = useState(false);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['read']);
+
+  // Available scopes for API keys
+  const availableScopes = [
+    { id: 'read', label: 'Read', description: 'View data and configurations' },
+    { id: 'write', label: 'Write', description: 'Create and update data' },
+    { id: 'upload', label: 'Upload', description: 'Upload files and assets' },
+    { id: 'publish', label: 'Publish', description: 'Publish content and make it live' },
+    { id: 'delete', label: 'Delete', description: 'Delete data and configurations' },
+  ];
 
   // Load API keys when modal opens
   useEffect(() => {
@@ -47,13 +59,23 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
       return;
     }
 
+    if (selectedScopes.length === 0) {
+      toast({
+        title: "Scopes required",
+        description: "Please select at least one scope for your API key.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsCreating(true);
     try {
-      const newKey = await createApiKey(newKeyName.trim());
+      const newKey = await createApiKey(newKeyName.trim(), selectedScopes);
       if (newKey) {
         setNewlyCreatedKey(newKey);
         setShowNewKey(true);
         setNewKeyName('');
+        setSelectedScopes(['read']); // Reset to default
         await loadApiKeys();
         
         toast({
@@ -62,9 +84,10 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to create API key. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create API key. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -86,9 +109,10 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
         description: "The API key has been successfully deleted."
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete API key. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to delete API key. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     }
@@ -117,6 +141,15 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
       setNewlyCreatedKey(null);
       setShowNewKey(false);
       setNewKeyName('');
+      setSelectedScopes(['read']);
+    }
+  };
+
+  const handleScopeChange = (scopeId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedScopes(prev => [...prev, scopeId]);
+    } else {
+      setSelectedScopes(prev => prev.filter(scope => scope !== scopeId));
     }
   };
 
@@ -216,9 +249,36 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
                   className="mt-1"
                 />
               </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-3 block">Permissions</label>
+                <div className="space-y-3">
+                  {availableScopes.map((scope) => (
+                    <div key={scope.id} className="flex items-start space-x-3">
+                      <Checkbox
+                        id={scope.id}
+                        checked={selectedScopes.includes(scope.id)}
+                        onCheckedChange={(checked) => handleScopeChange(scope.id, checked as boolean)}
+                      />
+                      <div className="grid gap-1.5 leading-none">
+                        <Label
+                          htmlFor={scope.id}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {scope.label}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {scope.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
               <Button 
                 onClick={handleCreateKey}
-                disabled={isCreating || !newKeyName.trim()}
+                disabled={isCreating || !newKeyName.trim() || selectedScopes.length === 0}
                 className="w-full"
               >
                 {isCreating ? (
@@ -268,7 +328,7 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
                               {key.prefix}...
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
                               Created {formatDistanceToNow(new Date(key.created_at), { addSuffix: true })}
@@ -281,6 +341,13 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
                             <Badge variant={key.is_active ? "secondary" : "outline"} className="text-xs">
                               {key.is_active ? "Active" : "Inactive"}
                             </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {key.scopes.map((scope) => (
+                              <Badge key={scope} variant="outline" className="text-xs">
+                                {scope}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -315,8 +382,9 @@ export function ApiKeyManagementModal({ children }: ApiKeyManagementModalProps) 
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>• API keys are used to authenticate requests to the Carp API</p>
-              <p>• Include your API key in the <code className="bg-muted px-1 py-0.5 rounded text-xs">Authorization</code> header</p>
+              <p>• Include your API key in the <code className="bg-muted px-1 py-0.5 rounded text-xs">Authorization</code> header as <code className="bg-muted px-1 py-0.5 rounded text-xs">Bearer your_api_key</code></p>
               <p>• Keys are only shown in full when first created - store them securely</p>
+              <p>• Select only the permissions your application needs (principle of least privilege)</p>
               <p>• You can create up to 10 API keys per account</p>
             </CardContent>
           </Card>
