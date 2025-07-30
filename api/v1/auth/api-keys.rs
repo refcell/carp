@@ -7,6 +7,7 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Since this is a Vercel serverless function, include auth functions directly
 use sha2::{Digest, Sha256};
+use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 
 /// User context extracted from authenticated API key
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,6 +15,21 @@ pub struct AuthenticatedUser {
     pub user_id: Uuid,
     pub key_id: Uuid,
     pub scopes: Vec<String>,
+}
+
+/// JWT claims structure for Supabase tokens
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SupabaseJwtClaims {
+    pub sub: String,  // user ID
+    pub aud: String,  // audience
+    pub exp: i64,     // expiration timestamp
+    pub iat: i64,     // issued at timestamp
+    pub iss: String,  // issuer
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub app_metadata: Option<serde_json::Value>,
+    pub user_metadata: Option<serde_json::Value>,
+    pub role: Option<String>,
 }
 
 /// API error response
@@ -24,8 +40,8 @@ pub struct ApiError {
     pub details: Option<serde_json::Value>,
 }
 
-/// Extract API key from request headers
-fn extract_api_key(req: &Request) -> Option<String> {
+/// Extract bearer token from request headers (API key or JWT token)
+fn extract_bearer_token(req: &Request) -> Option<String> {
     let headers = req.headers();
     
     // Try Authorization header first
@@ -54,9 +70,67 @@ fn hash_api_key(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Validate a Supabase JWT token and extract user information
+async fn validate_jwt_token(token: &str) -> Result<SupabaseJwtClaims, ApiError> {
+    let jwt_secret = env::var("SUPABASE_JWT_SECRET").unwrap_or_default();
+    
+    // For development/testing, allow mock JWT tokens
+    if jwt_secret.is_empty() {
+        // Create a mock claim for development
+        return Ok(SupabaseJwtClaims {
+            sub: Uuid::new_v4().to_string(),
+            aud: "authenticated".to_string(),
+            exp: (Utc::now() + chrono::Duration::hours(1)).timestamp(),
+            iat: Utc::now().timestamp(),
+            iss: "supabase".to_string(),
+            email: Some("dev@example.com".to_string()),
+            phone: None,
+            app_metadata: None,
+            user_metadata: None,
+            role: Some("authenticated".to_string()),
+        });
+    }
+
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.set_audience(&["authenticated"]);
+    
+    let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+    
+    let token_data = decode::<SupabaseJwtClaims>(token, &decoding_key, &validation)
+        .map_err(|e| ApiError {
+            error: "invalid_jwt".to_string(),
+            message: format!("Invalid JWT token: {e}"),
+            details: Some(json!({
+                "token_format_expected": "Valid Supabase JWT token",
+                "common_causes": [
+                    "Token expired",
+                    "Invalid signature",
+                    "Wrong audience",
+                    "Malformed token structure"
+                ]
+            })),
+        })?;
+
+    // Check if token is expired
+    let now = Utc::now().timestamp();
+    if token_data.claims.exp < now {
+        return Err(ApiError {
+            error: "expired_jwt".to_string(),
+            message: "JWT token has expired".to_string(),
+            details: Some(json!({
+                "expired_at": token_data.claims.exp,
+                "current_time": now,
+                "expired_seconds_ago": now - token_data.claims.exp
+            })),
+        });
+    }
+
+    Ok(token_data.claims)
+}
+
 /// Authenticate a request using API key
 async fn authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiError> {
-    let api_key = extract_api_key(req).ok_or_else(|| ApiError {
+    let api_key = extract_bearer_token(req).ok_or_else(|| ApiError {
         error: "missing_api_key".to_string(),
         message: "API key is required".to_string(),
         details: None,
@@ -81,16 +155,16 @@ async fn authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiErr
     
     // Verify API key using the database function
     let response = client
-        .post(&format!("{}/rest/v1/rpc/verify_api_key", supabase_url))
+        .post(format!("{supabase_url}/rest/v1/rpc/verify_api_key"))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
+        .header("Authorization", format!("Bearer {supabase_key}"))
         .header("Content-Type", "application/json")
         .json(&json!({ "key_hash_param": key_hash }))
         .send()
         .await
         .map_err(|e| ApiError {
             error: "database_error".to_string(),
-            message: format!("Failed to verify API key: {}", e),
+            message: format!("Failed to verify API key: {e}"),
             details: None,
         })?;
 
@@ -104,7 +178,7 @@ async fn authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiErr
 
     let verification_result: serde_json::Value = response.json().await.map_err(|e| ApiError {
         error: "parse_error".to_string(),
-        message: format!("Failed to parse verification response: {}", e),
+        message: format!("Failed to parse verification response: {e}"),
         details: None,
     })?;
 
@@ -147,6 +221,72 @@ async fn authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiErr
         error: "invalid_api_key".to_string(),
         message: "Invalid or expired API key".to_string(),
         details: None,
+    })
+}
+
+/// Bootstrap authenticate a request using either API key or JWT token
+/// This allows initial API key creation using Supabase JWT tokens
+async fn bootstrap_authenticate_request(req: &Request) -> Result<AuthenticatedUser, ApiError> {
+    // Extract token once to avoid duplicate processing
+    let token = extract_bearer_token(req).ok_or_else(|| ApiError {
+        error: "missing_authentication".to_string(),
+        message: "Authentication required: provide either a valid API key or Supabase JWT token".to_string(),
+        details: Some(json!({
+            "accepted_auth_methods": ["api_key", "jwt_token"],
+            "header_formats": [
+                "Authorization: Bearer <api_key>",
+                "Authorization: Bearer <jwt_token>",
+                "X-API-Key: <api_key>"
+            ]
+        })),
+    })?;
+
+    // First try to authenticate with API key (existing method)
+    match authenticate_request(req).await {
+        Ok(user) => {
+            // Successfully authenticated with API key
+            return Ok(user);
+        }
+        Err(api_key_error) => {
+            // Log the API key authentication failure for debugging
+            if env::var("DEBUG_AUTH").unwrap_or_default() == "true" {
+                eprintln!("API key authentication failed: {:?}", api_key_error);
+            }
+            // Continue to try JWT authentication instead of failing here
+        }
+    }
+
+    // Validate JWT token with better error context
+    let jwt_claims = match validate_jwt_token(&token).await {
+        Ok(claims) => claims,
+        Err(jwt_error) => {
+            return Err(ApiError {
+                error: "authentication_failed".to_string(),
+                message: "Neither API key nor JWT token authentication succeeded".to_string(),
+                details: Some(json!({
+                    "jwt_error": jwt_error.message,
+                    "help": "Ensure you're using a valid Supabase JWT token for initial API key creation, or a valid API key for subsequent operations"
+                })),
+            });
+        }
+    };
+    
+    // Parse user ID from JWT claims with better error handling
+    let user_id = Uuid::parse_str(&jwt_claims.sub).map_err(|e| ApiError {
+        error: "invalid_jwt_user_id".to_string(),
+        message: format!("Invalid user ID format in JWT token: {}", e),
+        details: Some(json!({
+            "provided_user_id": jwt_claims.sub,
+            "expected_format": "UUID v4 format (xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)"
+        })),
+    })?;
+
+    // For JWT-based authentication, we create a synthetic AuthenticatedUser
+    // with bootstrap scopes that allow API key creation
+    Ok(AuthenticatedUser {
+        user_id,
+        key_id: Uuid::new_v4(), // Synthetic key ID for JWT authentication
+        scopes: vec!["bootstrap".to_string(), "read".to_string(), "write".to_string()],
     })
 }
 
@@ -210,23 +350,40 @@ async fn main() -> Result<(), Error> {
 }
 
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
-    // Authenticate the request
-    let authenticated_user = match authenticate_request(&req).await {
-        Ok(user) => user,
-        Err(auth_error) => {
-            return Ok(Response::builder()
-                .status(401)
-                .header("content-type", "application/json")
-                .body(serde_json::to_string(&auth_error)?.into())?);
-        }
-    };
-
-    // Route based on HTTP method and path
+    // Route based on HTTP method and use appropriate authentication
     match req.method().as_str() {
-        "GET" => list_api_keys(&authenticated_user).await,
-        "POST" => create_api_key(&req, &authenticated_user).await,
-        "PUT" | "PATCH" => update_api_key(&req, &authenticated_user).await,
-        "DELETE" => delete_api_key(&req, &authenticated_user).await,
+        "POST" => {
+            // For creating API keys, use bootstrap authentication (accepts both API key and JWT)
+            let authenticated_user = match bootstrap_authenticate_request(&req).await {
+                Ok(user) => user,
+                Err(auth_error) => {
+                    return Ok(Response::builder()
+                        .status(401)
+                        .header("content-type", "application/json")
+                        .body(serde_json::to_string(&auth_error)?.into())?);
+                }
+            };
+            create_api_key(&req, &authenticated_user).await
+        }
+        "GET" | "PUT" | "PATCH" | "DELETE" => {
+            // For all other operations, use regular API key authentication
+            let authenticated_user = match authenticate_request(&req).await {
+                Ok(user) => user,
+                Err(auth_error) => {
+                    return Ok(Response::builder()
+                        .status(401)
+                        .header("content-type", "application/json")
+                        .body(serde_json::to_string(&auth_error)?.into())?);
+                }
+            };
+            
+            match req.method().as_str() {
+                "GET" => list_api_keys(&authenticated_user).await,
+                "PUT" | "PATCH" => update_api_key(&req, &authenticated_user).await,
+                "DELETE" => delete_api_key(&req, &authenticated_user).await,
+                _ => unreachable!(), // We already matched these methods above
+            }
+        }
         _ => {
             let error = ApiError {
                 error: "method_not_allowed".to_string(),
@@ -275,7 +432,7 @@ async fn list_api_keys(
     let response = client
         .get(&format!("{}/rest/v1/api_keys", supabase_url))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
+        .header("Authorization", format!("Bearer {supabase_key}"))
         .header("Content-Type", "application/json")
         .query(&[("user_id", format!("eq.{}", authenticated_user.user_id))])
         .query(&[("select", "id,name,prefix,scopes,is_active,last_used_at,expires_at,created_at")])
@@ -391,7 +548,7 @@ async fn create_api_key(
     let response = client
         .post(&format!("{}/rest/v1/api_keys", supabase_url))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
+        .header("Authorization", format!("Bearer {supabase_key}"))
         .header("Content-Type", "application/json")
         .header("Prefer", "return=representation")
         .json(&insert_data)
@@ -560,7 +717,7 @@ async fn delete_api_key(
     let response = client
         .delete(&format!("{}/rest/v1/api_keys", supabase_url))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
+        .header("Authorization", format!("Bearer {supabase_key}"))
         .query(&[("id", format!("eq.{}", key_id))])
         .query(&[("user_id", format!("eq.{}", authenticated_user.user_id))])
         .send()

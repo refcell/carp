@@ -4,16 +4,19 @@
 
 // Get the API base URL based on environment
 export const getApiBaseUrl = (): string => {
-  // Check if we're in development mode
-  if (process.env.NODE_ENV === 'development') {
-    // For local development, API functions are served from the same origin
-    // as the frontend via Vercel's local development server
-    return process.env.NEXT_PUBLIC_API_URL || '';
+  // In Vite, environment variables are accessed via import.meta.env
+  // and must be prefixed with VITE_ to be available in the browser
+  const apiUrl = import.meta.env.VITE_API_URL;
+  
+  // If a custom API URL is set, use it
+  if (apiUrl) {
+    return apiUrl;
   }
   
-  // For production, API functions are served from the same origin
-  // No separate API domain needed with Vercel serverless functions
-  return process.env.NEXT_PUBLIC_API_URL || '';
+  // For both development and production with Vercel, 
+  // API functions are available at the same origin via rewrites
+  // This works because Vercel handles /api/* routing to serverless functions
+  return '';
 };
 
 // API endpoints
