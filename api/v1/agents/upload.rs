@@ -5,7 +5,7 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
 use serde_json::json;
-use shared::{api_key_middleware, require_scope, ApiError, AuthenticatedUser};
+use shared::{api_key_middleware, require_scope, ApiError, AuthenticatedUser, AuthMethod, UserMetadata};
 
 /// Agent metadata returned by the API
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,15 +389,118 @@ async fn upload_agent(
         return Ok(create_mock_uploaded_agent(request, user));
     }
 
-    // In production:
-    // 1. Parse YAML frontmatter from content
-    // 2. Extract agent metadata and content body
-    // 3. Store the agent definition in Supabase Storage
-    // 4. Create/update agent record in database
-    // 5. Return the created agent
+    // Parse YAML frontmatter from content to create definition JSON
+    let definition = parse_agent_definition(&request.content)
+        .map_err(|e| format!("Failed to parse agent definition: {e}"))?;
 
-    // For now, return mock data
-    Ok(create_mock_uploaded_agent(request, user))
+    // Prepare agent data for database insertion
+    let version = request.version.unwrap_or_else(|| "1.0.0".to_string());
+    let agent_data = json!({
+        "user_id": user.user_id,
+        "name": request.name,
+        "description": request.description,
+        "definition": definition,
+        "tags": request.tags,
+        "current_version": version,
+        "author_name": format!("user-{}", user.user_id),
+        "license": request.license,
+        "homepage": request.homepage,
+        "repository": request.repository,
+        "readme": request.content,
+        "is_public": true
+    });
+
+    // Create HTTP client
+    let client = reqwest::Client::new();
+
+    // Insert agent into database using upsert (insert or update)
+    let response = client
+        .post(format!("{supabase_url}/rest/v1/agents"))
+        .header("apikey", &supabase_key)
+        .header("Authorization", format!("Bearer {supabase_key}"))
+        .header("Content-Type", "application/json")
+        .header("Prefer", "return=representation,resolution=merge-duplicates")
+        .json(&agent_data)
+        .send()
+        .await
+        .map_err(|e| format!("Database request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("Database error: {error_text}"));
+    }
+
+    let response_body = response.text().await
+        .map_err(|e| format!("Failed to read response: {e}"))?;
+
+    // Parse the created/updated agent from response
+    let created_agents: Vec<serde_json::Value> = serde_json::from_str(&response_body)
+        .map_err(|e| format!("Failed to parse database response: {e}"))?;
+
+    if let Some(agent_data) = created_agents.first() {
+        let agent = Agent {
+            name: agent_data["name"].as_str().unwrap_or(&request.name).to_string(),
+            version,
+            description: agent_data["description"].as_str().unwrap_or(&request.description).to_string(),
+            author: agent_data["author_name"].as_str().unwrap_or(&format!("user-{}", user.user_id)).to_string(),
+            created_at: serde_json::from_value(agent_data["created_at"].clone())
+                .unwrap_or_else(|_| Utc::now()),
+            updated_at: serde_json::from_value(agent_data["updated_at"].clone())
+                .unwrap_or_else(|_| Utc::now()),
+            download_count: agent_data["download_count"].as_u64().unwrap_or(0),
+            tags: serde_json::from_value(agent_data["tags"].clone()).unwrap_or(request.tags),
+            readme: Some(request.content),
+            homepage: request.homepage,
+            repository: request.repository,
+            license: request.license,
+        };
+        Ok(agent)
+    } else {
+        Err("No agent data returned from database".to_string())
+    }
+}
+
+/// Parse agent definition from markdown content with YAML frontmatter
+fn parse_agent_definition(content: &str) -> Result<serde_json::Value, String> {
+    // Validate that content starts with YAML frontmatter
+    if !content.starts_with("---") {
+        return Err("Content must contain YAML frontmatter starting with ---".to_string());
+    }
+
+    // Find the end of the frontmatter
+    let lines: Vec<&str> = content.lines().collect();
+    let mut frontmatter_end = None;
+
+    for (i, line) in lines.iter().enumerate().skip(1) {
+        let trimmed = line.trim();
+        if trimmed == "---" || trimmed == "..." {
+            frontmatter_end = Some(i);
+            break;
+        }
+    }
+
+    let frontmatter_end = frontmatter_end
+        .ok_or_else(|| "Invalid YAML frontmatter: missing closing --- or ...".to_string())?;
+
+    // Extract frontmatter and content body
+    let frontmatter_lines = &lines[1..frontmatter_end];
+    let frontmatter_content = frontmatter_lines.join("\n");
+    let body_lines = &lines[(frontmatter_end + 1)..];
+    let body_content = body_lines.join("\n");
+
+    // Parse YAML frontmatter
+    let frontmatter: serde_json::Value = serde_yaml::from_str(&frontmatter_content)
+        .map_err(|e| format!("Invalid YAML frontmatter: {e}"))?;
+
+    // Create complete definition with frontmatter metadata and body content
+    let definition = json!({
+        "metadata": frontmatter,
+        "content": body_content,
+        "format": "markdown",
+        "frontmatter_type": "yaml"
+    });
+
+    Ok(definition)
 }
 
 fn create_mock_uploaded_agent(request: UploadAgentRequest, user: &AuthenticatedUser) -> Agent {
@@ -554,8 +657,13 @@ description: Different description
         let request = create_valid_upload_request();
         let mock_user = AuthenticatedUser {
             user_id: uuid::Uuid::new_v4(),
-            key_id: uuid::Uuid::new_v4(),
+            auth_method: AuthMethod::ApiKey { key_id: uuid::Uuid::new_v4() },
             scopes: vec!["read".to_string(), "write".to_string()],
+            metadata: UserMetadata {
+                email: Some("test@example.com".to_string()),
+                github_username: Some("testuser".to_string()),
+                created_at: Some(Utc::now()),
+            },
         };
         let agent = create_mock_uploaded_agent(request.clone(), &mock_user);
 
@@ -567,6 +675,6 @@ description: Different description
         assert_eq!(agent.repository, request.repository);
         assert_eq!(agent.license, request.license);
         assert_eq!(agent.download_count, 0);
-        assert_eq!(agent.author, "mock-user");
+        assert_eq!(agent.author, format!("user-{}", mock_user.user_id));
     }
 }
