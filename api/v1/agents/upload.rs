@@ -5,7 +5,7 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
 use serde_json::json;
-use shared::{api_key_middleware, require_scope, ApiError, AuthenticatedUser, AuthMethod, UserMetadata};
+use shared::{api_key_middleware, require_scope, ApiError, AuthenticatedUser};
 
 /// Agent metadata returned by the API
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -385,7 +385,7 @@ fn validate_frontmatter_consistency(
 async fn upload_agent(
     request: UploadAgentRequest,
     user: &AuthenticatedUser,
-    auth_header: &str,
+    _auth_header: &str,
 ) -> Result<Agent, String> {
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
@@ -402,7 +402,7 @@ async fn upload_agent(
 
     // Prepare parameters for create_agent function
     let version = request.version.unwrap_or_else(|| "1.0.0".to_string());
-    let function_params = json!({
+    let _function_params = json!({
         "agent_name": request.name,
         "description": request.description,
         "author_name": format!("user-{}", user.user_id),
@@ -418,14 +418,32 @@ async fn upload_agent(
     // Create HTTP client
     let client = reqwest::Client::new();
 
-    // Call create_agent database function using RPC
-    // Pass the original API key in authorization header for the function to use
+    // Since the user is already authenticated via API key middleware,
+    // we can safely create the agent with service role and correct user_id
+    let agent_data = json!({
+        "user_id": user.user_id,
+        "name": request.name,
+        "description": request.description,
+        "definition": definition,
+        "tags": request.tags,
+        "author_name": format!("user-{}", user.user_id),
+        "license": request.license.clone().unwrap_or_else(|| "MIT".to_string()),
+        "homepage": request.homepage.clone().unwrap_or_else(|| "".to_string()),
+        "repository": request.repository.clone().unwrap_or_else(|| "".to_string()),
+        "readme": request.content,
+        "keywords": request.tags,
+        "current_version": version,
+        "is_public": true
+    });
+
+    // Use service role to bypass RLS since we've already validated the user
     let response = client
-        .post(format!("{supabase_url}/rest/v1/rpc/create_agent"))
+        .post(format!("{supabase_url}/rest/v1/agents"))
         .header("apikey", &supabase_key)
-        .header("Authorization", auth_header) // Use original API key
+        .header("Authorization", format!("Bearer {supabase_key}"))
         .header("Content-Type", "application/json")
-        .json(&function_params)
+        .header("Prefer", "return=representation")
+        .json(&agent_data)
         .send()
         .await
         .map_err(|e| format!("Database request failed: {e}"))?;
@@ -438,49 +456,22 @@ async fn upload_agent(
     let response_body = response.text().await
         .map_err(|e| format!("Failed to read response: {e}"))?;
 
-    // Parse the function response
-    let function_result: serde_json::Value = serde_json::from_str(&response_body)
+    // Parse the created agent from database response
+    let created_agents: Vec<serde_json::Value> = serde_json::from_str(&response_body)
         .map_err(|e| format!("Failed to parse database response: {e}"))?;
 
-    // Check if the function returned success
-    if let Some(success) = function_result["success"].as_bool() {
-        if !success {
-            let error_msg = function_result["error"].as_str().unwrap_or("Unknown database error");
-            return Err(format!("Database function error: {error_msg}"));
-        }
-        
-        // Get the created agent ID
-        let agent_id = function_result["agent_id"].as_str()
-            .ok_or_else(|| "No agent_id returned from create function".to_string())?;
-            
-        // Update the agent with the definition field using service role
-        let update_data = json!({"definition": definition});
-        let update_response = client
-            .patch(format!("{supabase_url}/rest/v1/agents?id=eq.{agent_id}"))
-            .header("apikey", &supabase_key)
-            .header("Authorization", auth_header) // Use original API key for RLS
-            .header("Content-Type", "application/json")
-            .header("Prefer", "return=representation")
-            .json(&update_data)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to update agent definition: {e}"))?;
-            
-        if !update_response.status().is_success() {
-            let error_text = update_response.text().await.unwrap_or_default();
-            return Err(format!("Failed to update agent definition: {error_text}"));
-        }
-        
-        // Create agent response from the successful creation
+    if let Some(agent_data) = created_agents.first() {
         let agent = Agent {
-            name: request.name.clone(),
+            name: agent_data["name"].as_str().unwrap_or(&request.name).to_string(),
             version,
-            description: request.description.clone(),
-            author: format!("user-{}", user.user_id),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            download_count: 0,
-            tags: request.tags,
+            description: agent_data["description"].as_str().unwrap_or(&request.description).to_string(),
+            author: agent_data["author_name"].as_str().unwrap_or(&format!("user-{}", user.user_id)).to_string(),
+            created_at: serde_json::from_value(agent_data["created_at"].clone())
+                .unwrap_or_else(|_| Utc::now()),
+            updated_at: serde_json::from_value(agent_data["updated_at"].clone())
+                .unwrap_or_else(|_| Utc::now()),
+            download_count: agent_data["download_count"].as_u64().unwrap_or(0),
+            tags: serde_json::from_value(agent_data["tags"].clone()).unwrap_or(request.tags),
             readme: Some(request.content),
             homepage: request.homepage,
             repository: request.repository,
@@ -488,7 +479,7 @@ async fn upload_agent(
         };
         Ok(agent)
     } else {
-        Err("Invalid database function response format".to_string())
+        Err("No agent data returned from database".to_string())
     }
 }
 
