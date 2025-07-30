@@ -6,14 +6,14 @@
 export const getApiBaseUrl = (): string => {
   // Check if we're in development mode
   if (process.env.NODE_ENV === 'development') {
-    // For local development, you might want to use a different URL
-    // This should point to your local backend API server
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // For local development, API functions are served from the same origin
+    // as the frontend via Vercel's local development server
+    return process.env.NEXT_PUBLIC_API_URL || '';
   }
   
-  // For production, use the environment variable or a default
-  // This should be set to your production API URL
-  return process.env.NEXT_PUBLIC_API_URL || 'https://api.getcarp.dev';
+  // For production, API functions are served from the same origin
+  // No separate API domain needed with Vercel serverless functions
+  return process.env.NEXT_PUBLIC_API_URL || '';
 };
 
 // API endpoints
