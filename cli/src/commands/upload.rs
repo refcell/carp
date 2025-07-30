@@ -74,9 +74,9 @@ pub async fn execute(directory: Option<String>, api_key: Option<String>, verbose
 fn expand_directory_path(directory: Option<String>) -> CarpResult<PathBuf> {
     let dir_str = directory.unwrap_or_else(|| "~/.claude/agents/".to_string());
 
-    let expanded_path = if dir_str.starts_with('~') {
+    let expanded_path = if let Some(stripped) = dir_str.strip_prefix('~') {
         if let Some(home_dir) = dirs::home_dir() {
-            home_dir.join(dir_str.strip_prefix("~/").unwrap_or(&dir_str[1..]))
+            home_dir.join(dir_str.strip_prefix("~/").unwrap_or(stripped))
         } else {
             return Err(CarpError::FileSystem(
                 "Unable to determine home directory".to_string(),
@@ -113,7 +113,7 @@ fn scan_agent_files(dir_path: &Path, verbose: bool) -> CarpResult<Vec<AgentFile>
 
     for entry in WalkDir::new(dir_path).follow_links(false) {
         let entry =
-            entry.map_err(|e| CarpError::FileSystem(format!("Error scanning directory: {}", e)))?;
+            entry.map_err(|e| CarpError::FileSystem(format!("Error scanning directory: {e}")))?;
 
         let path = entry.path();
         if path.is_file() {
@@ -166,7 +166,7 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
 
     // Parse YAML frontmatter
     let frontmatter: serde_json::Value = serde_yaml::from_str(&frontmatter_content)
-        .map_err(|e| CarpError::ManifestError(format!("Invalid YAML frontmatter: {}", e)))?;
+        .map_err(|e| CarpError::ManifestError(format!("Invalid YAML frontmatter: {e}")))?;
 
     // Extract name and description
     let name = frontmatter
@@ -189,7 +189,7 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
         .and_then(|n| n.to_str())
         .unwrap_or("unknown");
 
-    let display_name = format!("{} ({})", name, file_name);
+    let display_name = format!("{name} ({file_name})");
 
     if verbose {
         println!(
@@ -213,7 +213,7 @@ fn select_agent(agents: Vec<AgentFile>) -> CarpResult<AgentFile> {
 
     let selection = Select::new("Select an agent to upload:", options)
         .prompt()
-        .map_err(|e| CarpError::Other(format!("Selection cancelled: {}", e)))?;
+        .map_err(|e| CarpError::Other(format!("Selection cancelled: {e}")))?;
 
     // Find the selected agent
     agents

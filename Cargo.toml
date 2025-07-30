@@ -6,6 +6,10 @@ description = "Serverless REST API for the Carp agent registry"
 license = "MIT OR Apache-2.0"
 rust-version = "1.82"
 
+[lib]
+name = "shared"
+path = "shared/mod.rs"
+
 [[bin]]
 name = "health"
 path = "api/health.rs"

@@ -28,6 +28,7 @@ fn create_test_config() -> Config {
 
     Config {
         registry_url: test_config.api_base_url,
+        api_key: env::var("CARP_TEST_API_KEY").ok(),
         api_token: env::var("CARP_TEST_TOKEN").ok(),
         timeout: 30,
         verify_ssl: true,

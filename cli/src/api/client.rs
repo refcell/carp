@@ -79,7 +79,7 @@ impl ApiClient {
         // Validate API key if provided
         if let Some(ref key) = api_key {
             if let Err(e) = crate::config::ConfigManager::validate_api_key(key) {
-                eprintln!("Warning: Invalid API key format: {}", e);
+                eprintln!("Warning: Invalid API key format: {e}");
             }
         }
         self.api_key = api_key;
@@ -483,7 +483,7 @@ impl ApiClient {
         }
 
         // Validate content size (max 1MB for JSON upload)
-        const MAX_CONTENT_SIZE: usize = 1 * 1024 * 1024;
+        const MAX_CONTENT_SIZE: usize = 1024 * 1024;
         if request.content.len() > MAX_CONTENT_SIZE {
             return Err(CarpError::InvalidAgent(format!(
                 "Content size ({} bytes) exceeds maximum allowed size ({} bytes)",
@@ -551,7 +551,7 @@ impl ApiClient {
 
         // Parse YAML frontmatter
         let frontmatter: serde_json::Value = serde_yaml::from_str(&frontmatter_content)
-            .map_err(|e| CarpError::InvalidAgent(format!("Invalid YAML frontmatter: {}", e)))?;
+            .map_err(|e| CarpError::InvalidAgent(format!("Invalid YAML frontmatter: {e}")))?;
 
         // Validate name consistency
         if let Some(frontmatter_name) = frontmatter.get("name").and_then(|v| v.as_str()) {
@@ -631,7 +631,7 @@ impl ApiClient {
         let text = response.text().await?;
 
         if status.is_success() {
-            serde_json::from_str(&text).map_err(|e| CarpError::Json(e))
+            serde_json::from_str(&text).map_err(CarpError::Json)
         } else {
             // Handle specific authentication errors with helpful messages
             if status.as_u16() == 401 {
@@ -644,8 +644,7 @@ impl ApiClient {
                 };
                 
                 return Err(CarpError::Auth(format!(
-                    "{}\n\nTo fix this:\n  1. Get your API key from the registry dashboard\n  2. Set it via: carp auth set-api-key\n  3. Or use: --api-key <your-key>\n  4. Or set CARP_API_KEY environment variable",
-                    auth_error
+                    "{auth_error}\n\nTo fix this:\n  1. Get your API key from the registry dashboard\n  2. Set it via: carp auth set-api-key\n  3. Or use: --api-key <your-key>\n  4. Or set CARP_API_KEY environment variable"
                 )));
             }
 

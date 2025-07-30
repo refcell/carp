@@ -90,7 +90,7 @@ impl AuthManager {
                 } else {
                     "config file"
                 };
-                println!("API Key: {} (masked, from {})", masked_key, source);
+                println!("API Key: {masked_key} (masked, from {source})");
             }
 
             println!("Status: {}", "Ready to use authenticated commands".green());

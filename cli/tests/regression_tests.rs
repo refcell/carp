@@ -30,6 +30,7 @@ fn create_regression_test_config() -> Config {
 
     Config {
         registry_url: test_config.api_base_url,
+        api_key: env::var("CARP_TEST_API_KEY").ok(),
         api_token: env::var("CARP_TEST_TOKEN").ok(),
         timeout: 15,
         verify_ssl: true,

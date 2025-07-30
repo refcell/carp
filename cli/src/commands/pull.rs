@@ -19,7 +19,7 @@ pub async fn execute(
             "Pulling agent '{}'{}...",
             name,
             version
-                .map(|v| format!(" version {}", v))
+                .map(|v| format!(" version {v}"))
                 .unwrap_or_default()
         );
     }
@@ -130,8 +130,8 @@ fn verify_checksum(content: &[u8], expected: &str) -> CarpResult<()> {
     use sha2::{Digest, Sha256};
 
     // Parse expected checksum (remove "sha256-" prefix if present)
-    let expected_hash = if expected.starts_with("sha256-") {
-        &expected[7..]
+    let expected_hash = if let Some(hash) = expected.strip_prefix("sha256-") {
+        hash
     } else {
         expected
     };

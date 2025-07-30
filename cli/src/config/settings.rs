@@ -167,7 +167,7 @@ impl ConfigManager {
 
         let mut config = if config_path.exists() {
             let contents = fs::read_to_string(&config_path)
-                .map_err(|e| CarpError::Config(format!("Failed to read config file: {}", e)))?;
+                .map_err(|e| CarpError::Config(format!("Failed to read config file: {e}")))?;
 
             toml::from_str::<Config>(&contents)?
         } else {
@@ -195,7 +195,7 @@ impl ConfigManager {
             config.api_key = config.api_token.take();
             // Save the migrated config
             if let Err(e) = Self::save(config) {
-                eprintln!("Warning: Failed to save migrated configuration: {}", e);
+                eprintln!("Warning: Failed to save migrated configuration: {e}");
             } else {
                 eprintln!("Info: Migrated api_token to api_key in configuration file.");
             }
@@ -330,7 +330,7 @@ impl ConfigManager {
         }
 
         // Parse URL to validate format
-        if let Err(_) = url.parse::<reqwest::Url>() {
+        if url.parse::<reqwest::Url>().is_err() {
             return Err(CarpError::Config("Invalid registry URL format".to_string()));
         }
 
@@ -341,10 +341,10 @@ impl ConfigManager {
     pub fn save(config: &Config) -> CarpResult<()> {
         let config_path = Self::config_path()?;
         let contents = toml::to_string_pretty(config)
-            .map_err(|e| CarpError::Config(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| CarpError::Config(format!("Failed to serialize config: {e}")))?;
 
         fs::write(&config_path, contents)
-            .map_err(|e| CarpError::Config(format!("Failed to write config file: {}", e)))?;
+            .map_err(|e| CarpError::Config(format!("Failed to write config file: {e}")))?;
 
         // Set restrictive permissions on config file (600 - owner read/write only)
         #[cfg(unix)]
@@ -484,11 +484,10 @@ impl ConfigManager {
         };
 
         let template = toml::to_string_pretty(&template_config)
-            .map_err(|e| CarpError::Config(format!("Failed to generate template: {}", e)))?;
+            .map_err(|e| CarpError::Config(format!("Failed to generate template: {e}")))?;
 
         Ok(format!(
-            "# Carp CLI Configuration Template\n# Environment variables will be substituted at runtime\n# Copy this file to ~/.config/carp/config.toml and customize as needed\n# Set CARP_API_KEY environment variable or add api_key field for authentication\n\n{}", 
-            template
+            "# Carp CLI Configuration Template\n# Environment variables will be substituted at runtime\n# Copy this file to ~/.config/carp/config.toml and customize as needed\n# Set CARP_API_KEY environment variable or add api_key field for authentication\n\n{template}"
         ))
     }
 
@@ -502,11 +501,11 @@ impl ConfigManager {
         }
 
         let contents = fs::read_to_string(path)
-            .map_err(|e| CarpError::Config(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| CarpError::Config(format!("Failed to read config file: {e}")))?;
 
         // Parse without loading into full config to check syntax
         let _: toml::Value = toml::from_str(&contents)
-            .map_err(|e| CarpError::Config(format!("Invalid TOML syntax: {}", e)))?;
+            .map_err(|e| CarpError::Config(format!("Invalid TOML syntax: {e}")))?;
 
         println!("Configuration file syntax is valid.");
         Ok(())

@@ -34,10 +34,10 @@ impl AgentManifest {
     /// Load manifest from a TOML file
     pub fn load<P: AsRef<Path>>(path: P) -> CarpResult<Self> {
         let contents = fs::read_to_string(&path)
-            .map_err(|e| CarpError::ManifestError(format!("Failed to read manifest: {}", e)))?;
+            .map_err(|e| CarpError::ManifestError(format!("Failed to read manifest: {e}")))?;
 
         let manifest: AgentManifest = toml::from_str(&contents)
-            .map_err(|e| CarpError::ManifestError(format!("Failed to parse manifest: {}", e)))?;
+            .map_err(|e| CarpError::ManifestError(format!("Failed to parse manifest: {e}")))?;
 
         manifest.validate()?;
         Ok(manifest)
@@ -48,11 +48,11 @@ impl AgentManifest {
         self.validate()?;
 
         let contents = toml::to_string_pretty(self).map_err(|e| {
-            CarpError::ManifestError(format!("Failed to serialize manifest: {}", e))
+            CarpError::ManifestError(format!("Failed to serialize manifest: {e}"))
         })?;
 
         fs::write(&path, contents)
-            .map_err(|e| CarpError::ManifestError(format!("Failed to write manifest: {}", e)))?;
+            .map_err(|e| CarpError::ManifestError(format!("Failed to write manifest: {e}")))?;
 
         Ok(())
     }
@@ -113,7 +113,7 @@ impl AgentManifest {
         Self {
             name: name.to_string(),
             version: "0.1.0".to_string(),
-            description: format!("A Claude AI agent named {}", name),
+            description: format!("A Claude AI agent named {name}"),
             author: "Your Name <your.email@example.com>".to_string(),
             license: Some("MIT".to_string()),
             homepage: None,

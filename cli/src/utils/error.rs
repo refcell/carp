@@ -37,21 +37,21 @@ pub enum CarpError {
 impl fmt::Display for CarpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CarpError::Io(e) => write!(f, "IO error: {}", e),
-            CarpError::Http(e) => write!(f, "HTTP error: {}", e),
-            CarpError::Json(e) => write!(f, "JSON error: {}", e),
-            CarpError::Toml(e) => write!(f, "TOML error: {}", e),
-            CarpError::Config(msg) => write!(f, "Configuration error: {}", msg),
-            CarpError::Auth(msg) => write!(f, "Authentication error: {}", msg),
+            CarpError::Io(e) => write!(f, "IO error: {e}"),
+            CarpError::Http(e) => write!(f, "HTTP error: {e}"),
+            CarpError::Json(e) => write!(f, "JSON error: {e}"),
+            CarpError::Toml(e) => write!(f, "TOML error: {e}"),
+            CarpError::Config(msg) => write!(f, "Configuration error: {msg}"),
+            CarpError::Auth(msg) => write!(f, "Authentication error: {msg}"),
             CarpError::Api { status, message } => {
-                write!(f, "API error ({}): {}", status, message)
+                write!(f, "API error ({status}): {message}")
             }
-            CarpError::AgentNotFound(name) => write!(f, "Agent '{}' not found", name),
-            CarpError::InvalidAgent(msg) => write!(f, "Invalid agent: {}", msg),
-            CarpError::ManifestError(msg) => write!(f, "Manifest error: {}", msg),
-            CarpError::FileSystem(msg) => write!(f, "File system error: {}", msg),
-            CarpError::Network(msg) => write!(f, "Network error: {}", msg),
-            CarpError::Other(msg) => write!(f, "{}", msg),
+            CarpError::AgentNotFound(name) => write!(f, "Agent '{name}' not found"),
+            CarpError::InvalidAgent(msg) => write!(f, "Invalid agent: {msg}"),
+            CarpError::ManifestError(msg) => write!(f, "Manifest error: {msg}"),
+            CarpError::FileSystem(msg) => write!(f, "File system error: {msg}"),
+            CarpError::Network(msg) => write!(f, "Network error: {msg}"),
+            CarpError::Other(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -94,6 +94,6 @@ impl From<toml::de::Error> for CarpError {
 
 impl From<zip::result::ZipError> for CarpError {
     fn from(err: zip::result::ZipError) -> Self {
-        CarpError::FileSystem(format!("ZIP error: {}", err))
+        CarpError::FileSystem(format!("ZIP error: {err}"))
     }
 }

@@ -11,7 +11,7 @@ pub async fn execute(
     verbose: bool,
 ) -> CarpResult<()> {
     if verbose {
-        println!("Searching for agents matching '{}'...", query);
+        println!("Searching for agents matching '{query}'...");
     }
 
     let config = ConfigManager::load_with_env_checks()?;
