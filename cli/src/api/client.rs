@@ -124,6 +124,7 @@ impl ApiClient {
     }
 
     /// Get download information for a specific agent
+    #[allow(dead_code)]
     pub async fn get_agent_download(
         &self,
         name: &str,
@@ -152,6 +153,7 @@ impl ApiClient {
     }
 
     /// Download agent content
+    #[allow(dead_code)]
     pub async fn download_agent(&self, download_url: &str) -> CarpResult<bytes::Bytes> {
         // Validate download URL
         if download_url.is_empty() {

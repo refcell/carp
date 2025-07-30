@@ -90,14 +90,12 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum AuthCommands {
-    /// Set API key for authentication
-    SetApiKey,
+    /// Login with API key
+    Login,
     /// Show authentication status
     Status,
     /// Clear stored API key (logout)
     Logout,
-    /// Legacy login command (deprecated)
-    Login,
 }
 
 #[tokio::main]
@@ -128,10 +126,9 @@ async fn run(cli: Cli) -> CarpResult<()> {
             upload::execute(directory, cli.api_key, cli.verbose).await
         }
         Commands::Auth { auth_command } => match auth_command {
-            AuthCommands::SetApiKey => AuthManager::set_api_key().await,
+            AuthCommands::Login => AuthManager::login().await,
             AuthCommands::Status => AuthManager::status_with_key(cli.api_key.as_deref()).await,
             AuthCommands::Logout => AuthManager::logout().await,
-            AuthCommands::Login => AuthManager::set_api_key().await,
         },
     }
 }

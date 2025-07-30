@@ -164,7 +164,7 @@ fn get_directory_path(directory: Option<String>, verbose: bool) -> CarpResult<Pa
     } else {
         // Prompt user for directory
         let default_dir = "~/.claude/agents/";
-        let prompt_text = format!("Enter directory to scan for agents (default: {}):", default_dir);
+        let prompt_text = format!("Enter directory to scan for agents (default: {default_dir}):");
         
         let input = inquire::Text::new(&prompt_text)
             .with_default(default_dir)
@@ -273,9 +273,9 @@ fn extract_field_as_string(frontmatter: &serde_json::Value, field: &str) -> Opti
             // Join array elements as comma-separated string
             Some(
                 arr.iter()
-                    .filter_map(|item| match item {
-                        serde_json::Value::String(s) => Some(s.clone()),
-                        _ => Some(item.to_string()),
+                    .map(|item| match item {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => item.to_string(),
                     })
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -330,7 +330,7 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
         .map_err(|e| {
             if verbose {
                 eprintln!("YAML parsing failed for {}: {}", path.display(), e);
-                eprintln!("Frontmatter content:\n{}", frontmatter_content);
+                eprintln!("Frontmatter content:\n{frontmatter_content}");
             }
             CarpError::ManifestError(format!("Invalid YAML frontmatter: {e}"))
         })?;
@@ -419,7 +419,7 @@ async fn upload_agent(
     };
 
     // Upload to registry  
-    let client = ApiClient::new(&config)?.with_api_key(api_key.map(|s| s.to_string()));
+    let client = ApiClient::new(config)?.with_api_key(api_key.map(|s| s.to_string()));
 
     if verbose {
         println!("Uploading to registry...");

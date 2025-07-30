@@ -6,9 +6,9 @@ use colored::*;
 pub struct AuthManager;
 
 impl AuthManager {
-    /// Set API key for authentication
-    pub async fn set_api_key() -> CarpResult<()> {
-        println!("{}", "Set API Key for Carp Registry".bold().green());
+    /// Login with API key for authentication
+    pub async fn login() -> CarpResult<()> {
+        println!("{}", "Login to Carp Registry".bold().green());
         println!("Enter your API key (input will be hidden):");
 
         let api_key = rpassword::prompt_password("API Key: ")?;
@@ -28,15 +28,15 @@ impl AuthManager {
     }
 
     /// Legacy login method (deprecated)
-    #[deprecated(note = "Use set_api_key instead. Username/password authentication is deprecated.")]
+    #[deprecated(note = "Use login instead. Username/password authentication is deprecated.")]
     #[allow(dead_code)]
-    pub async fn login() -> CarpResult<()> {
+    pub async fn deprecated_login() -> CarpResult<()> {
         println!(
             "{}",
             "Username/password login is deprecated.".yellow().bold()
         );
         println!("Please use API key authentication instead:");
-        println!("  Run: carp auth set-api-key");
+        println!("  Run: carp auth login");
         println!("  Or: set CARP_API_KEY environment variable");
         println!("  Or: use --api-key command line option");
 
@@ -104,7 +104,7 @@ impl AuthManager {
         } else {
             println!("{}", "Not authenticated".red().bold());
             println!("Authenticate using one of these methods:");
-            println!("  1. Run: carp auth set-api-key");
+            println!("  1. Run: carp auth login");
             println!("  2. Set CARP_API_KEY environment variable");
             println!("  3. Use --api-key command line option");
         }
@@ -118,7 +118,7 @@ impl AuthManager {
             println!("You can authenticate by:");
             println!("  1. Setting CARP_API_KEY environment variable");
             println!("  2. Using --api-key command line option");
-            println!("  3. Running 'carp auth set-api-key' to store API key in config");
+            println!("  3. Running 'carp auth login' to store API key in config");
             return Err(CarpError::Auth(
                 "No API key configured. Please set your API key via command line, environment variable, or config file.".to_string(),
             ));

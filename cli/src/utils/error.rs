@@ -30,6 +30,7 @@ pub enum CarpError {
     /// File system errors
     FileSystem(String),
     /// Network connectivity errors
+    #[allow(dead_code)]
     Network(String),
     /// Generic errors with custom message
     Other(String),
