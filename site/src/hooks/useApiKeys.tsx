@@ -30,26 +30,34 @@ export interface CreateApiKeyResponse {
 
 export function useApiKeys() {
   const [loading, setLoading] = useState(false);
-  const { user, session } = useAuth();
+  const { user, session, refreshTokenIfNeeded } = useAuth();
 
-  // Create an authenticated fetch request
+  // Create an authenticated fetch request with session validation and token refresh
   const authenticatedFetch = useCallback(async (url: string, options: RequestInit = {}) => {
-    // Use the Supabase JWT token for authentication
-    // This works with the backend's bootstrap authentication system
-    // which accepts JWT tokens for API key creation
-    const token = session?.access_token;
+    console.log('[ApiKeys] Starting authenticated request to:', url);
     
-    if (!token) {
-      throw new Error('You must be logged in to perform this action. Please sign in and try again.');
+    // Validate session exists before making request
+    if (!session?.access_token || !user) {
+      const errorMsg = !session?.access_token 
+        ? 'Authentication required. Please sign in.' 
+        : 'User session is not available. Please refresh the page and try again.';
+      console.error('[ApiKeys] Authentication validation failed:', errorMsg);
+      throw new Error(errorMsg);
     }
-
-    if (!user) {
-      throw new Error('User session is not available. Please refresh the page and try again.');
+    
+    // Check and refresh token if needed
+    console.log('[ApiKeys] Validating token before request');
+    const tokenValid = await refreshTokenIfNeeded();
+    if (!tokenValid) {
+      const errorMsg = 'Authentication session expired. Please sign in again.';
+      console.error('[ApiKeys] Token refresh failed:', errorMsg);
+      throw new Error(errorMsg);
     }
-
-    const fetchFn = createAuthenticatedFetch(token);
+    
+    console.log('[ApiKeys] Token validated, making authenticated request');
+    const fetchFn = createAuthenticatedFetch(session.access_token);
     return fetchFn(url, options);
-  }, [session, user]);
+  }, [session, user, refreshTokenIfNeeded]);
 
   // Fetch user's API keys
   const fetchApiKeys = useCallback(async (): Promise<ApiKey[]> => {
@@ -60,9 +68,10 @@ export function useApiKeys() {
       const apiUrl = getApiBaseUrl();
       const response = await authenticatedFetch(`${apiUrl}${API_ENDPOINTS.API_KEYS}`);
       const apiKeys: ApiKey[] = await response.json();
+      console.log('[ApiKeys] Successfully fetched', apiKeys.length, 'API keys');
       return apiKeys;
     } catch (error) {
-      console.error('Error fetching API keys:', error);
+      console.error('[ApiKeys] Error fetching API keys:', error);
       if (error instanceof ApiRequestError) {
         // Log specific API errors for debugging but don't throw
         // Fetching API keys is not critical and should fail gracefully
@@ -100,13 +109,14 @@ export function useApiKeys() {
       );
       
       const result: CreateApiKeyResponse = await response.json();
+      console.log('[ApiKeys] Successfully created API key:', result.info.name);
       
       return {
         ...result.info,
         full_key: result.key
       } as ApiKeyWithSecret;
     } catch (error) {
-      console.error('Error creating API key:', error);
+      console.error('[ApiKeys] Error creating API key:', error);
       
       // Handle specific API errors with user-friendly messages
       if (error instanceof ApiRequestError) {
@@ -114,6 +124,7 @@ export function useApiKeys() {
           case 'missing_authentication':
           case 'invalid_jwt':
           case 'expired_jwt':
+            console.error('[ApiKeys] Authentication error:', error.apiError.error);
             throw new Error('Authentication failed. Please sign out and sign in again to refresh your session.');
           case 'configuration_error':
             throw new Error('Server configuration error. Please contact support.');
