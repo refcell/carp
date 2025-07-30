@@ -2,9 +2,9 @@ use crate::api::ApiClient;
 use crate::config::ConfigManager;
 use crate::utils::error::{CarpError, CarpResult};
 use colored::*;
-use inquire::{InquireError, Select};
+use inquire::{InquireError, Select, Text};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Execute the pull command
 pub async fn execute(
@@ -37,64 +37,50 @@ pub async fn execute(
         );
     }
 
-    // Get download information
-    let download_info = client.get_agent_download(&name, version).await?;
+    // Get agent definition directly from search API
+    let agent_info = get_agent_definition(&client, &name, version).await?;
 
     if verbose {
         println!(
-            "Found {} v{} ({} bytes)",
-            download_info.name, download_info.version, download_info.file_size
+            "Found {} v{} by {}",
+            agent_info.name, agent_info.version, agent_info.author
         );
     }
 
-    // Determine output directory
-    let output_dir = determine_output_dir(&name, output, &config)?;
+    // Determine output file path
+    let output_path = determine_output_file(&name, output, &config).await?;
 
-    // Check if directory exists and handle force flag
-    if output_dir.exists() && !force {
+    // Check if file exists and handle force flag
+    if output_path.exists() && !force {
         return Err(CarpError::FileSystem(format!(
-            "Directory '{}' already exists. Use --force to overwrite.",
-            output_dir.display()
+            "File '{}' already exists. Use --force to overwrite.",
+            output_path.display()
         )));
     }
 
-    if output_dir.exists() && force {
-        if verbose {
-            println!("Removing existing directory...");
-        }
-        fs::remove_dir_all(&output_dir)?;
+    // Create the agent definition content
+    let agent_content = create_agent_definition_file(&agent_info)?;
+
+    // Ensure the parent directory exists
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
     }
 
-    // Download the agent
-    println!("Downloading {}...", download_info.name.blue().bold());
-    let content = client.download_agent(&download_info.download_url).await?;
-
-    // Verify checksum if available
-    if !download_info.checksum.is_empty() {
-        if verbose {
-            println!("Verifying checksum...");
-        }
-        verify_checksum(&content, &download_info.checksum)?;
-    }
-
-    // Extract the agent
-    if verbose {
-        println!("Extracting to {}...", output_dir.display());
-    }
-    extract_agent(&content, &output_dir, &download_info.content_type)?;
+    // Write the agent definition file
+    fs::write(&output_path, agent_content)?;
 
     println!(
         "{} Successfully pulled {} v{} to {}",
         "✓".green().bold(),
-        download_info.name.blue().bold(),
-        download_info.version,
-        output_dir.display().to_string().cyan()
+        agent_info.name.blue().bold(),
+        agent_info.version,
+        output_path.display().to_string().cyan()
     );
 
     // Show usage instructions
     println!("\nTo use this agent:");
-    println!("  cd {}", output_dir.display());
-    println!("  # Follow the README.md for specific usage instructions");
+    println!("  # The agent definition is now available at {}", output_path.display());
+    println!("  # You can reference this agent in your code or agent orchestration system");
 
     Ok(())
 }
@@ -117,199 +103,197 @@ fn parse_agent_spec(spec: &str) -> CarpResult<(String, Option<&str>)> {
     }
 }
 
-/// Determine the output directory for the agent
-fn determine_output_dir(
+/// Get agent definition directly from search API
+async fn get_agent_definition(
+    client: &ApiClient,
+    name: &str,
+    version: Option<&str>,
+) -> CarpResult<crate::api::types::Agent> {
+    // Search for the specific agent
+    let response = client.search(name, Some(1000), true).await?;
+    
+    // Find the agent with matching name and version
+    let target_version = version.unwrap_or("latest");
+    
+    if target_version == "latest" {
+        // Find the latest version (versions are sorted in descending order from search)
+        response.agents
+            .into_iter()
+            .find(|agent| agent.name == name)
+            .ok_or_else(|| CarpError::Api {
+                status: 404,
+                message: format!("Agent '{name}' not found"),
+            })
+    } else {
+        // Find exact version match
+        response.agents
+            .into_iter()
+            .find(|agent| agent.name == name && agent.version == target_version)
+            .ok_or_else(|| CarpError::Api {
+                status: 404,
+                message: format!("Agent '{name}' version '{target_version}' not found"),
+            })
+    }
+}
+
+/// Determine the output file path for the agent definition
+async fn determine_output_file(
     name: &str,
     output: Option<String>,
     config: &crate::config::Config,
 ) -> CarpResult<PathBuf> {
     if let Some(output_path) = output {
-        return Ok(PathBuf::from(output_path));
+        let path = expand_tilde(&output_path);
+        
+        // If the path is a directory (or will be a directory), append the agent name as filename
+        if path.is_dir() || output_path.ends_with('/') || output_path.ends_with('\\') {
+            return Ok(path.join(format!("{name}.md")));
+        }
+        
+        return Ok(path);
     }
 
-    if let Some(default_dir) = &config.default_output_dir {
-        return Ok(PathBuf::from(default_dir).join(name));
-    }
+    // Get default agents directory
+    let default_agents_dir = get_default_agents_dir(config)?;
+    
+    // Ask user where to place the file
+    let prompt_text = format!(
+        "Where would you like to save the '{name}' agent definition?"
+    );
+    
+    let default_path = default_agents_dir.join(format!("{name}.md"));
+    
+    let file_path = Text::new(&prompt_text)
+        .with_default(&default_path.to_string_lossy())
+        .with_help_message("Enter the full path where you want to save the agent definition file")
+        .prompt()
+        .map_err(|e| match e {
+            InquireError::OperationCanceled => CarpError::Api {
+                status: 0,
+                message: "Operation cancelled by user.".to_string(),
+            },
+            _ => CarpError::Api {
+                status: 500,
+                message: format!("Input error: {e}"),
+            },
+        })?;
 
-    // Default to current directory
-    Ok(PathBuf::from(name))
-}
-
-/// Verify the checksum of downloaded content
-fn verify_checksum(content: &[u8], expected: &str) -> CarpResult<()> {
-    use sha2::{Digest, Sha256};
-
-    // Parse expected checksum (remove "sha256-" prefix if present)
-    let expected_hash = if let Some(hash) = expected.strip_prefix("sha256-") {
-        hash
+    let path = expand_tilde(&file_path);
+    
+    // If the path is a directory (or will be a directory), append the agent name as filename
+    if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
+        Ok(path.join(format!("{name}.md")))
     } else {
-        expected
-    };
-
-    let mut hasher = Sha256::new();
-    hasher.update(content);
-    let computed = format!("{:x}", hasher.finalize());
-
-    if computed != expected_hash {
-        return Err(CarpError::Network(format!(
-            "Checksum verification failed. Expected: {expected_hash}, Computed: {computed}. The downloaded file may be corrupted."
-        )));
-    }
-
-    Ok(())
-}
-
-/// Extract agent content to the specified directory
-fn extract_agent(content: &[u8], output_dir: &Path, content_type: &str) -> CarpResult<()> {
-    // Create output directory
-    fs::create_dir_all(output_dir)?;
-
-    match content_type {
-        "application/zip" => extract_zip(content, output_dir),
-        "application/gzip" | "application/x-gzip" => extract_gzip(content, output_dir),
-        _ => {
-            // Try to detect format by checking magic bytes
-            if content.starts_with(&[0x50, 0x4b, 0x03, 0x04])
-                || content.starts_with(&[0x50, 0x4b, 0x05, 0x06])
-            {
-                extract_zip(content, output_dir)
-            } else if content.starts_with(&[0x1f, 0x8b]) {
-                extract_gzip(content, output_dir)
-            } else {
-                Err(CarpError::FileSystem(format!(
-                    "Unsupported content type: {content_type}. Expected ZIP or GZIP format."
-                )))
-            }
-        }
+        Ok(path)
     }
 }
 
-/// Extract ZIP archive content
-fn extract_zip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
-    use std::io::Cursor;
-
-    let reader = Cursor::new(content);
-    let mut archive = zip::ZipArchive::new(reader)
-        .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP archive: {e}")))?;
-
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| CarpError::FileSystem(format!("Failed to read ZIP entry: {e}")))?;
-
-        // Security: Validate file path to prevent directory traversal attacks
-        let file_name = file.name();
-        if file_name.contains("..") || file_name.starts_with('/') || file_name.contains('\0') {
-            return Err(CarpError::FileSystem(format!(
-                "Unsafe file path in archive: {file_name}"
-            )));
-        }
-
-        let file_path = output_dir.join(file_name);
-
-        // Additional security: Ensure the resolved path is still within output_dir
-        let canonical_output = output_dir.canonicalize()?;
-        let canonical_file = file_path.canonicalize().unwrap_or_else(|_| {
-            file_path
-                .parent()
-                .unwrap_or(output_dir)
-                .join(file_path.file_name().unwrap_or_default())
-        });
-
-        if !canonical_file.starts_with(&canonical_output) {
-            return Err(CarpError::FileSystem(format!(
-                "File path outside target directory: {file_name}"
-            )));
-        }
-
-        if file.is_dir() {
-            fs::create_dir_all(&file_path)?;
+/// Expand tilde (~) in file paths
+fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(stripped) = path.strip_prefix("~/") {
+        if let Some(home_dir) = dirs::home_dir() {
+            home_dir.join(stripped)
         } else {
-            if let Some(parent) = file_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            let mut output_file = fs::File::create(&file_path)?;
-            std::io::copy(&mut file, &mut output_file)?;
-
-            // Set safe permissions on extracted files
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let mut perms = output_file.metadata()?.permissions();
-                perms.set_mode(0o644); // Owner read/write, group/other read
-                fs::set_permissions(&file_path, perms)?;
-            }
+            PathBuf::from(path)
         }
+    } else if path == "~" {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from(path))
+    } else {
+        PathBuf::from(path)
     }
-
-    Ok(())
 }
 
-/// Extract GZIP archive content (assumes it's a tar.gz)
-fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
-    use flate2::read::GzDecoder;
-    use std::io::Cursor;
-    use tar::Archive;
-
-    let reader = Cursor::new(content);
-    let decoder = GzDecoder::new(reader);
-    let mut archive = Archive::new(decoder);
-
-    for entry in archive
-        .entries()
-        .map_err(|e| CarpError::FileSystem(format!("Failed to read tar entries: {e}")))?
-    {
-        let mut entry =
-            entry.map_err(|e| CarpError::FileSystem(format!("Failed to read tar entry: {e}")))?;
-
-        let path = entry
-            .path()
-            .map_err(|e| CarpError::FileSystem(format!("Failed to get entry path: {e}")))?;
-        let file_path = output_dir.join(&path);
-
-        // Security: Validate file path to prevent directory traversal attacks
-        let path_str = path.to_string_lossy();
-        if path_str.contains("..") || path_str.starts_with('/') || path_str.contains('\0') {
-            return Err(CarpError::FileSystem(format!(
-                "Unsafe file path in archive: {path_str}"
-            )));
-        }
-
-        // Additional security: Ensure the resolved path is still within output_dir
-        let canonical_output = output_dir.canonicalize()?;
-        let canonical_file = file_path.canonicalize().unwrap_or_else(|_| {
-            file_path
-                .parent()
-                .unwrap_or(output_dir)
-                .join(file_path.file_name().unwrap_or_default())
-        });
-
-        if !canonical_file.starts_with(&canonical_output) {
-            return Err(CarpError::FileSystem(format!(
-                "File path outside target directory: {path_str}"
-            )));
-        }
-
-        // Extract the entry
-        entry
-            .unpack(&file_path)
-            .map_err(|e| CarpError::FileSystem(format!("Failed to extract file: {e}")))?;
-
-        // Set safe permissions on extracted files
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if file_path.is_file() {
-                let mut perms = fs::metadata(&file_path)?.permissions();
-                perms.set_mode(0o644); // Owner read/write, group/other read
-                fs::set_permissions(&file_path, perms)?;
-            }
-        }
+/// Get the default agents directory
+fn get_default_agents_dir(config: &crate::config::Config) -> CarpResult<PathBuf> {
+    if let Some(default_dir) = &config.default_output_dir {
+        return Ok(PathBuf::from(default_dir));
     }
 
-    Ok(())
+    // Use ~/.config/carp/agents/ as default
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| CarpError::Config("Unable to find config directory".to_string()))?;
+    
+    let agents_dir = config_dir.join("carp").join("agents");
+    Ok(agents_dir)
 }
+
+/// Create agent definition file content
+fn create_agent_definition_file(agent: &crate::api::types::Agent) -> CarpResult<String> {
+    let mut content = String::new();
+    
+    // Add YAML frontmatter
+    content.push_str("---\n");
+    content.push_str(&format!("name: {}\n", agent.name));
+    content.push_str(&format!("version: {}\n", agent.version));
+    content.push_str(&format!("description: {}\n", agent.description));
+    content.push_str(&format!("author: {}\n", agent.author));
+    
+    if let Some(homepage) = &agent.homepage {
+        content.push_str(&format!("homepage: {homepage}\n"));
+    }
+    
+    if let Some(repository) = &agent.repository {
+        content.push_str(&format!("repository: {repository}\n"));
+    }
+    
+    if let Some(license) = &agent.license {
+        content.push_str(&format!("license: {license}\n"));
+    }
+    
+    if !agent.tags.is_empty() {
+        content.push_str("tags:\n");
+        for tag in &agent.tags {
+            content.push_str(&format!("  - {tag}\n"));
+        }
+    }
+    
+    content.push_str(&format!("created_at: {}\n", agent.created_at.format("%Y-%m-%d %H:%M:%S UTC")));
+    content.push_str(&format!("updated_at: {}\n", agent.updated_at.format("%Y-%m-%d %H:%M:%S UTC")));
+    content.push_str(&format!("download_count: {}\n", agent.download_count));
+    content.push_str("---\n\n");
+    
+    // Add title
+    content.push_str(&format!("# {} Agent\n\n", agent.name));
+    
+    // Add description
+    content.push_str(&format!("{}\n\n", agent.description));
+    
+    // Add metadata section
+    content.push_str("## Metadata\n\n");
+    content.push_str(&format!("- **Version**: {}\n", agent.version));
+    content.push_str(&format!("- **Author**: {}\n", agent.author));
+    content.push_str(&format!("- **Downloads**: {}\n", agent.download_count));
+    content.push_str(&format!("- **Created**: {}\n", agent.created_at.format("%Y-%m-%d %H:%M UTC")));
+    content.push_str(&format!("- **Updated**: {}\n", agent.updated_at.format("%Y-%m-%d %H:%M UTC")));
+    
+    if !agent.tags.is_empty() {
+        content.push_str(&format!("- **Tags**: {}\n", agent.tags.join(", ")));
+    }
+    
+    if let Some(homepage) = &agent.homepage {
+        content.push_str(&format!("- **Homepage**: {homepage}\n"));
+    }
+    
+    if let Some(repository) = &agent.repository {
+        content.push_str(&format!("- **Repository**: {repository}\n"));
+    }
+    
+    if let Some(license) = &agent.license {
+        content.push_str(&format!("- **License**: {license}\n"));
+    }
+    
+    // Add README if available
+    if let Some(readme) = &agent.readme {
+        if !readme.trim().is_empty() {
+            content.push_str("\n## README\n\n");
+            content.push_str(readme);
+            content.push('\n');
+        }
+    }
+    
+    Ok(content)
+}
+
 
 /// Interactive agent selection using inquire
 async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
@@ -351,7 +335,7 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     if versions.is_empty() {
         return Err(CarpError::Api {
             status: 404,
-            message: format!("No versions found for agent '{}'.", selected_agent),
+            message: format!("No versions found for agent '{selected_agent}'."),
         });
     }
 
@@ -393,11 +377,11 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     );
 
     // Step 5: Get and display agent definition
-    if let Ok(agent_info) = get_agent_info(client, &selected_agent, &selected_version).await {
+    if let Ok(agent_info) = get_agent_definition(client, &selected_agent, Some(&selected_version)).await {
         display_agent_definition(&agent_info);
     }
 
-    Ok(format!("{}@{}", selected_agent, selected_version))
+    Ok(format!("{selected_agent}@{selected_version}"))
 }
 
 /// Get unique agent names from the registry
@@ -433,18 +417,6 @@ async fn get_agent_versions(client: &ApiClient, agent_name: &str) -> CarpResult<
     Ok(versions)
 }
 
-/// Get detailed agent information
-async fn get_agent_info(client: &ApiClient, name: &str, version: &str) -> CarpResult<crate::api::types::Agent> {
-    let response = client.search(name, Some(1000), true).await?;
-    
-    response.agents
-        .into_iter()
-        .find(|agent| agent.name == name && agent.version == version)
-        .ok_or_else(|| CarpError::Api {
-            status: 404,
-            message: format!("Agent '{}' version '{}' not found", name, version),
-        })
-}
 
 /// Display agent definition information
 fn display_agent_definition(agent: &crate::api::types::Agent) {
@@ -484,7 +456,7 @@ fn display_agent_definition(agent: &crate::api::types::Agent) {
     if let Some(readme) = &agent.readme {
         if !readme.trim().is_empty() {
             println!("\n{}", "README:".bold().underline());
-            println!("{}", readme);
+            println!("{readme}");
         }
     }
     
@@ -507,5 +479,93 @@ mod tests {
 
         assert!(parse_agent_spec("@1.0.0").is_err());
         assert!(parse_agent_spec("test-agent@").is_err());
+    }
+
+    #[test]
+    fn test_expand_tilde() {
+        // Test tilde expansion for home directory paths
+        let expanded = expand_tilde("~/test/path");
+        if let Some(home_dir) = dirs::home_dir() {
+            assert_eq!(expanded, home_dir.join("test/path"));
+        }
+
+        // Test just tilde
+        let expanded = expand_tilde("~");
+        if let Some(home_dir) = dirs::home_dir() {
+            assert_eq!(expanded, home_dir);
+        }
+
+        // Test absolute paths (no tilde)
+        let expanded = expand_tilde("/absolute/path");
+        assert_eq!(expanded, PathBuf::from("/absolute/path"));
+
+        // Test relative paths (no tilde)
+        let expanded = expand_tilde("relative/path");
+        assert_eq!(expanded, PathBuf::from("relative/path"));
+    }
+
+    #[test]
+    fn test_directory_path_handling() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Test case 1: Existing directory should append agent name
+        let existing_dir = temp_path.join("existing");
+        fs::create_dir(&existing_dir).unwrap();
+        
+        // Mock the logic from determine_output_file for directory handling
+        let agent_name = "test-agent";
+        let file_path = existing_dir.to_string_lossy().to_string();
+        let path = expand_tilde(&file_path);
+        
+        let result = if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
+            path.join(format!("{agent_name}.md"))
+        } else {
+            path
+        };
+        
+        assert_eq!(result, existing_dir.join("test-agent.md"));
+
+        // Test case 2: Path ending with '/' should append agent name
+        let dir_with_slash = format!("{}/", temp_path.join("nonexistent").to_string_lossy());
+        let path = expand_tilde(&dir_with_slash);
+        
+        let result = if path.is_dir() || dir_with_slash.ends_with('/') || dir_with_slash.ends_with('\\') {
+            path.join(format!("{agent_name}.md"))
+        } else {
+            path
+        };
+        
+        assert_eq!(result, temp_path.join("nonexistent").join("test-agent.md"));
+
+        // Test case 3: Regular file path should be returned as-is
+        let file_path = temp_path.join("agent.md").to_string_lossy().to_string();
+        let path = expand_tilde(&file_path);
+        
+        let result = if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
+            path.join(format!("{agent_name}.md"))
+        } else {
+            path
+        };
+        
+        assert_eq!(result, temp_path.join("agent.md"));
+
+        // Test case 4: Tilde expansion with directory should work
+        if let Some(home_dir) = dirs::home_dir() {
+            let tilde_path = "~/.claude/agents/";
+            let path = expand_tilde(tilde_path);
+            
+            let result = if path.is_dir() || tilde_path.ends_with('/') || tilde_path.ends_with('\\') {
+                path.join(format!("{agent_name}.md"))
+            } else {
+                path
+            };
+            
+            assert_eq!(result, home_dir.join(".claude/agents/test-agent.md"));
+        }
     }
 }

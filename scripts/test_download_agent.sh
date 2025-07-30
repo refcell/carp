@@ -1,8 +1,8 @@
 #!/bin/bash
 
 API_BASE_URL="https://api.carp.refcell.org"
-AGENT_NAME="${AGENT_NAME:-test-agent}"
-AGENT_VERSION="${AGENT_VERSION:-latest}"
+AGENT_NAME="${AGENT_NAME:-content-writer}"
+AGENT_VERSION="${AGENT_VERSION:-1.0.0}"
 
 echo "Testing download agent endpoint..."
 response=$(curl -s -w "%{http_code}" -X GET \
