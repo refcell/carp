@@ -154,8 +154,14 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         }
     }
 
+    // Extract the original API key from the request for database function
+    let auth_header = req.headers()
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+
     // Process the upload request
-    match upload_agent(upload_request, &authenticated_user).await {
+    match upload_agent(upload_request, &authenticated_user, auth_header).await {
         Ok(agent) => {
             let response = UploadAgentResponse {
                 success: true,
@@ -379,6 +385,7 @@ fn validate_frontmatter_consistency(
 async fn upload_agent(
     request: UploadAgentRequest,
     user: &AuthenticatedUser,
+    auth_header: &str,
 ) -> Result<Agent, String> {
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
@@ -393,19 +400,17 @@ async fn upload_agent(
     let definition = parse_agent_definition(&request.content)
         .map_err(|e| format!("Failed to parse agent definition: {e}"))?;
 
-    // Prepare agent data for database insertion
+    // Prepare parameters for create_agent function
     let version = request.version.unwrap_or_else(|| "1.0.0".to_string());
-    let agent_data = json!({
-        "user_id": user.user_id,
-        "name": request.name,
+    let function_params = json!({
+        "agent_name": request.name,
         "description": request.description,
-        "definition": definition,
-        "tags": request.tags,
-        "current_version": version,
         "author_name": format!("user-{}", user.user_id),
-        "license": request.license,
-        "homepage": request.homepage,
-        "repository": request.repository,
+        "tags": request.tags,
+        "keywords": request.tags, // Use tags as keywords for now
+        "license": request.license.clone().unwrap_or_else(|| "MIT".to_string()),
+        "homepage": request.homepage.clone().unwrap_or_else(|| "".to_string()),
+        "repository": request.repository.clone().unwrap_or_else(|| "".to_string()),
         "readme": request.content,
         "is_public": true
     });
@@ -413,14 +418,14 @@ async fn upload_agent(
     // Create HTTP client
     let client = reqwest::Client::new();
 
-    // Insert agent into database using upsert (insert or update)
+    // Call create_agent database function using RPC
+    // Pass the original API key in authorization header for the function to use
     let response = client
-        .post(format!("{supabase_url}/rest/v1/agents"))
+        .post(format!("{supabase_url}/rest/v1/rpc/create_agent"))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {supabase_key}"))
+        .header("Authorization", auth_header) // Use original API key
         .header("Content-Type", "application/json")
-        .header("Prefer", "return=representation,resolution=merge-duplicates")
-        .json(&agent_data)
+        .json(&function_params)
         .send()
         .await
         .map_err(|e| format!("Database request failed: {e}"))?;
@@ -433,22 +438,49 @@ async fn upload_agent(
     let response_body = response.text().await
         .map_err(|e| format!("Failed to read response: {e}"))?;
 
-    // Parse the created/updated agent from response
-    let created_agents: Vec<serde_json::Value> = serde_json::from_str(&response_body)
+    // Parse the function response
+    let function_result: serde_json::Value = serde_json::from_str(&response_body)
         .map_err(|e| format!("Failed to parse database response: {e}"))?;
 
-    if let Some(agent_data) = created_agents.first() {
+    // Check if the function returned success
+    if let Some(success) = function_result["success"].as_bool() {
+        if !success {
+            let error_msg = function_result["error"].as_str().unwrap_or("Unknown database error");
+            return Err(format!("Database function error: {error_msg}"));
+        }
+        
+        // Get the created agent ID
+        let agent_id = function_result["agent_id"].as_str()
+            .ok_or_else(|| "No agent_id returned from create function".to_string())?;
+            
+        // Update the agent with the definition field using service role
+        let update_data = json!({"definition": definition});
+        let update_response = client
+            .patch(format!("{supabase_url}/rest/v1/agents?id=eq.{agent_id}"))
+            .header("apikey", &supabase_key)
+            .header("Authorization", auth_header) // Use original API key for RLS
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=representation")
+            .json(&update_data)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to update agent definition: {e}"))?;
+            
+        if !update_response.status().is_success() {
+            let error_text = update_response.text().await.unwrap_or_default();
+            return Err(format!("Failed to update agent definition: {error_text}"));
+        }
+        
+        // Create agent response from the successful creation
         let agent = Agent {
-            name: agent_data["name"].as_str().unwrap_or(&request.name).to_string(),
+            name: request.name.clone(),
             version,
-            description: agent_data["description"].as_str().unwrap_or(&request.description).to_string(),
-            author: agent_data["author_name"].as_str().unwrap_or(&format!("user-{}", user.user_id)).to_string(),
-            created_at: serde_json::from_value(agent_data["created_at"].clone())
-                .unwrap_or_else(|_| Utc::now()),
-            updated_at: serde_json::from_value(agent_data["updated_at"].clone())
-                .unwrap_or_else(|_| Utc::now()),
-            download_count: agent_data["download_count"].as_u64().unwrap_or(0),
-            tags: serde_json::from_value(agent_data["tags"].clone()).unwrap_or(request.tags),
+            description: request.description.clone(),
+            author: format!("user-{}", user.user_id),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            download_count: 0,
+            tags: request.tags,
             readme: Some(request.content),
             homepage: request.homepage,
             repository: request.repository,
@@ -456,7 +488,7 @@ async fn upload_agent(
         };
         Ok(agent)
     } else {
-        Err("No agent data returned from database".to_string())
+        Err("Invalid database function response format".to_string())
     }
 }
 

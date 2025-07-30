@@ -374,6 +374,12 @@ fn select_agents(agents: Vec<AgentFile>) -> CarpResult<AgentSelection> {
         return Err(CarpError::Other("No agents found".to_string()));
     }
 
+    // If there's only one agent, automatically select it
+    if agents.len() == 1 {
+        println!("Found single agent: {}", agents[0].display_name);
+        return Ok(AgentSelection::Single(agents.into_iter().next().unwrap()));
+    }
+
     let mut options = vec!["📦 All agents".to_string()];
     options.extend(agents.iter().map(|a| a.display_name.clone()));
 
