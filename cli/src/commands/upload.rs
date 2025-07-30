@@ -17,6 +17,13 @@ pub struct AgentFile {
     pub display_name: String,
 }
 
+/// Selection result from agent selection prompt
+#[derive(Debug)]
+enum AgentSelection {
+    Single(AgentFile),
+    All(Vec<AgentFile>),
+}
+
 /// Execute the upload command
 pub async fn execute(
     directory: Option<String>,
@@ -41,8 +48,8 @@ pub async fn execute(
     // Ensure user is authenticated (either via API key parameter or stored configuration)
     AuthManager::ensure_authenticated(effective_api_key).await?;
 
-    // Expand directory path, defaulting to ~/.claude/agents/
-    let dir_path = expand_directory_path(directory)?;
+    // Get directory path - either provided, prompted for, or use default
+    let dir_path = get_directory_path(directory, verbose)?;
 
     if verbose {
         println!("Scanning directory: {}", dir_path.display());
@@ -67,26 +74,117 @@ pub async fn execute(
         println!("Found {} agent files", agent_files.len());
     }
 
-    // Use inquire to prompt user for agent selection
-    let selected_agent = select_agent(agent_files)?;
+    // Use inquire to prompt user for agent selection (including "All" option)
+    let selection = select_agents(agent_files.clone())?;
 
-    if verbose {
-        println!("Selected agent: {}", selected_agent.name);
+    match selection {
+        AgentSelection::Single(agent) => {
+            if verbose {
+                println!("Selected agent: {}", agent.name);
+            }
+
+            // Read and parse the selected agent file
+            let agent_content = fs::read_to_string(&agent.path)?;
+
+            // Upload the agent
+            upload_agent(&agent, agent_content, effective_api_key, verbose, &config).await?;
+
+            println!(
+                "{} Successfully uploaded agent '{}'",
+                "✓".green().bold(),
+                agent.name.blue().bold()
+            );
+        }
+        AgentSelection::All(agents) => {
+            if verbose {
+                println!("Uploading all {} agents", agents.len());
+            }
+
+            let mut successful = 0;
+            let mut failed = 0;
+
+            for agent in agents {
+                println!(
+                    "{} Uploading agent '{}'...",
+                    "⟳".blue().bold(),
+                    agent.name.blue().bold()
+                );
+
+                match fs::read_to_string(&agent.path) {
+                    Ok(agent_content) => {
+                        match upload_agent(&agent, agent_content, effective_api_key, verbose, &config).await {
+                            Ok(_) => {
+                                println!(
+                                    "{} Successfully uploaded agent '{}'",
+                                    "✓".green().bold(),
+                                    agent.name.blue().bold()
+                                );
+                                successful += 1;
+                            }
+                            Err(e) => {
+                                println!(
+                                    "{} Failed to upload agent '{}': {}",
+                                    "✗".red().bold(),
+                                    agent.name.red().bold(),
+                                    e
+                                );
+                                failed += 1;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!(
+                            "{} Failed to read agent '{}': {}",
+                            "✗".red().bold(),
+                            agent.name.red().bold(),
+                            e
+                        );
+                        failed += 1;
+                    }
+                }
+            }
+
+            println!(
+                "\n{} Upload complete: {} successful, {} failed",
+                "✓".green().bold(),
+                successful.to_string().green().bold(),
+                if failed > 0 { failed.to_string().red().bold() } else { failed.to_string().green().bold() }
+            );
+        }
     }
 
-    // Read and parse the selected agent file
-    let agent_content = fs::read_to_string(&selected_agent.path)?;
-
-    // Upload the agent
-    upload_agent(&selected_agent, agent_content, effective_api_key, verbose, &config).await?;
-
-    println!(
-        "{} Successfully uploaded agent '{}'",
-        "✓".green().bold(),
-        selected_agent.name.blue().bold()
-    );
-
     Ok(())
+}
+
+/// Get directory path from user input, prompt, or default
+fn get_directory_path(directory: Option<String>, verbose: bool) -> CarpResult<PathBuf> {
+    let dir_path = if let Some(dir) = directory {
+        // Directory provided via command line
+        expand_directory_path(Some(dir))?
+    } else {
+        // Prompt user for directory
+        let default_dir = "~/.claude/agents/";
+        let prompt_text = format!("Enter directory to scan for agents (default: {}):", default_dir);
+        
+        let input = inquire::Text::new(&prompt_text)
+            .with_default(default_dir)
+            .prompt()
+            .map_err(|e| CarpError::Other(format!("Input cancelled: {e}")))?;
+        
+        let input = if input.trim().is_empty() {
+            default_dir.to_string()
+        } else {
+            input
+        };
+        
+        expand_directory_path(Some(input))?
+    };
+    
+    if verbose {
+        println!("Using directory: {}", dir_path.display());
+    }
+    
+    Ok(dir_path)
 }
 
 /// Expand directory path, handling tilde expansion
@@ -139,8 +237,20 @@ fn scan_agent_files(dir_path: &Path, verbose: bool) -> CarpResult<Vec<AgentFile>
             // Check if it's a markdown file
             if let Some(extension) = path.extension() {
                 if extension == "md" {
-                    if let Ok(agent) = parse_agent_file(path, verbose) {
-                        agents.push(agent);
+                    match parse_agent_file(path, verbose) {
+                        Ok(agent) => {
+                            agents.push(agent);
+                        }
+                        Err(e) => {
+                            if verbose {
+                                println!(
+                                    "  {} Skipping {}: {}",
+                                    "⚠".yellow(),
+                                    path.display(),
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -151,6 +261,32 @@ fn scan_agent_files(dir_path: &Path, verbose: bool) -> CarpResult<Vec<AgentFile>
     agents.sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(agents)
+}
+
+/// Extract a field from YAML as a string, handling various data types
+fn extract_field_as_string(frontmatter: &serde_json::Value, field: &str) -> Option<String> {
+    frontmatter.get(field).and_then(|v| match v {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        serde_json::Value::Array(arr) => {
+            // Join array elements as comma-separated string
+            Some(
+                arr.iter()
+                    .filter_map(|item| match item {
+                        serde_json::Value::String(s) => Some(s.clone()),
+                        _ => Some(item.to_string()),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+        serde_json::Value::Object(_) => {
+            // Convert object to string representation
+            Some(v.to_string())
+        }
+        serde_json::Value::Null => None,
+    })
 }
 
 /// Parse an agent file to extract name and description from YAML frontmatter
@@ -164,43 +300,49 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
         ));
     }
 
-    // Find the end of the frontmatter
+    // Find the end of the frontmatter with more flexible boundary detection
     let lines: Vec<&str> = content.lines().collect();
     let mut frontmatter_end = None;
 
     for (i, line) in lines.iter().enumerate().skip(1) {
-        if line.trim() == "---" {
+        let trimmed = line.trim();
+        // Accept "---" or "..." as valid YAML document endings
+        if trimmed == "---" || trimmed == "..." {
             frontmatter_end = Some(i);
             break;
         }
     }
 
     let frontmatter_end = frontmatter_end.ok_or_else(|| {
-        CarpError::ManifestError("Invalid YAML frontmatter: missing closing ---".to_string())
+        if verbose {
+            eprintln!("Could not find closing frontmatter boundary in {}", path.display());
+            eprintln!("Looking for '---' or '...' after opening '---'");
+        }
+        CarpError::ManifestError("Invalid YAML frontmatter: missing closing --- or ...".to_string())
     })?;
 
     // Extract frontmatter content
     let frontmatter_lines = &lines[1..frontmatter_end];
     let frontmatter_content = frontmatter_lines.join("\n");
 
-    // Parse YAML frontmatter
+    // Parse YAML frontmatter with better error handling
     let frontmatter: serde_json::Value = serde_yaml::from_str(&frontmatter_content)
-        .map_err(|e| CarpError::ManifestError(format!("Invalid YAML frontmatter: {e}")))?;
+        .map_err(|e| {
+            if verbose {
+                eprintln!("YAML parsing failed for {}: {}", path.display(), e);
+                eprintln!("Frontmatter content:\n{}", frontmatter_content);
+            }
+            CarpError::ManifestError(format!("Invalid YAML frontmatter: {e}"))
+        })?;
 
-    // Extract name and description
-    let name = frontmatter
-        .get("name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| CarpError::ManifestError("Missing 'name' field in frontmatter".to_string()))?
-        .to_string();
+    // Extract name and description with more flexible handling
+    let name = extract_field_as_string(&frontmatter, "name")
+        .ok_or_else(|| CarpError::ManifestError("Missing 'name' field in frontmatter".to_string()))?;
 
-    let description = frontmatter
-        .get("description")
-        .and_then(|v| v.as_str())
+    let description = extract_field_as_string(&frontmatter, "description")
         .ok_or_else(|| {
             CarpError::ManifestError("Missing 'description' field in frontmatter".to_string())
-        })?
-        .to_string();
+        })?;
 
     // Create display name for selection
     let file_name = path
@@ -226,19 +368,30 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
     })
 }
 
-/// Use inquire to prompt user for agent selection
-fn select_agent(agents: Vec<AgentFile>) -> CarpResult<AgentFile> {
-    let options: Vec<String> = agents.iter().map(|a| a.display_name.clone()).collect();
+/// Use inquire to prompt user for agent selection (single or all)
+fn select_agents(agents: Vec<AgentFile>) -> CarpResult<AgentSelection> {
+    if agents.is_empty() {
+        return Err(CarpError::Other("No agents found".to_string()));
+    }
 
-    let selection = Select::new("Select an agent to upload:", options)
+    let mut options = vec!["📦 All agents".to_string()];
+    options.extend(agents.iter().map(|a| a.display_name.clone()));
+
+    let selection = Select::new("Select agents to upload:", options)
         .prompt()
         .map_err(|e| CarpError::Other(format!("Selection cancelled: {e}")))?;
 
-    // Find the selected agent
-    agents
-        .into_iter()
-        .find(|a| a.display_name == selection)
-        .ok_or_else(|| CarpError::Other("Selected agent not found".to_string()))
+    if selection == "📦 All agents" {
+        Ok(AgentSelection::All(agents))
+    } else {
+        // Find the selected agent
+        let selected_agent = agents
+            .into_iter()
+            .find(|a| a.display_name == selection)
+            .ok_or_else(|| CarpError::Other("Selected agent not found".to_string()))?;
+        
+        Ok(AgentSelection::Single(selected_agent))
+    }
 }
 
 /// Upload the selected agent to the registry

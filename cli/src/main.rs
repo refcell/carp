@@ -71,13 +71,12 @@ enum Commands {
         force: bool,
     },
 
-    /// Upload an agent from the local filesystem to the registry
+    /// Upload agents from the local filesystem to the registry
     Upload {
         #[arg(
             short,
             long,
-            help = "Directory to scan for agents",
-            default_value = "~/.claude/agents/"
+            help = "Directory to scan for agents (prompts if not provided)"
         )]
         directory: Option<String>,
     },
