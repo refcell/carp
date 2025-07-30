@@ -433,12 +433,16 @@ impl ConfigManager {
 
         // Basic API key format validation
         if api_key.len() < 8 {
-            return Err(CarpError::Auth("API key too short (minimum 8 characters)".to_string()));
+            return Err(CarpError::Auth(
+                "API key too short (minimum 8 characters)".to_string(),
+            ));
         }
 
         // Check for potentially unsafe characters
         if api_key.contains(['\n', '\r', '\t', ' ']) {
-            return Err(CarpError::Auth("API key contains invalid characters".to_string()));
+            return Err(CarpError::Auth(
+                "API key contains invalid characters".to_string(),
+            ));
         }
 
         // Warn about potentially insecure keys
@@ -473,7 +477,7 @@ impl ConfigManager {
     pub fn export_template() -> CarpResult<String> {
         let template_config = Config {
             registry_url: "${CARP_REGISTRY_URL:-https://api.carp.refcell.org}".to_string(),
-            api_key: None, // Never include API keys in templates
+            api_key: None,   // Never include API keys in templates
             api_token: None, // Never include legacy tokens in templates
             timeout: 30,
             verify_ssl: true,

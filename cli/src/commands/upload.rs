@@ -18,7 +18,11 @@ pub struct AgentFile {
 }
 
 /// Execute the upload command
-pub async fn execute(directory: Option<String>, api_key: Option<String>, verbose: bool) -> CarpResult<()> {
+pub async fn execute(
+    directory: Option<String>,
+    api_key: Option<String>,
+    verbose: bool,
+) -> CarpResult<()> {
     // Ensure user is authenticated (either via API key parameter or stored configuration)
     AuthManager::ensure_authenticated(api_key.as_deref()).await?;
 
@@ -223,7 +227,12 @@ fn select_agent(agents: Vec<AgentFile>) -> CarpResult<AgentFile> {
 }
 
 /// Upload the selected agent to the registry
-async fn upload_agent(agent: &AgentFile, content: String, api_key: Option<String>, verbose: bool) -> CarpResult<()> {
+async fn upload_agent(
+    agent: &AgentFile,
+    content: String,
+    api_key: Option<String>,
+    verbose: bool,
+) -> CarpResult<()> {
     if verbose {
         println!("Preparing to upload agent '{}'...", agent.name);
     }

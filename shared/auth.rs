@@ -123,7 +123,7 @@ pub async fn validate_jwt_token(
         if config.debug_mode {
             eprintln!("DEBUG: Using mock JWT token in development mode");
         }
-        
+
         // Create a mock claim for development - use a fixed UUID for consistency
         return Ok(SupabaseJwtClaims {
             sub: "550e8400-e29b-41d4-a716-446655440000".to_string(), // Fixed dev UUID
@@ -144,11 +144,11 @@ pub async fn validate_jwt_token(
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_audience(&["authenticated"]);
     validation.validate_exp = true;
-    
+
     let decoding_key = DecodingKey::from_secret(config.supabase_jwt_secret.as_bytes());
 
-    let token_data = decode::<SupabaseJwtClaims>(token, &decoding_key, &validation)
-        .map_err(|e| {
+    let token_data =
+        decode::<SupabaseJwtClaims>(token, &decoding_key, &validation).map_err(|e| {
             if config.debug_mode {
                 eprintln!("DEBUG: JWT validation failed: {}", e);
             }
@@ -241,7 +241,7 @@ pub async fn authenticate_api_key(
         if config.debug_mode {
             eprintln!("DEBUG: Using mock API key authentication in development mode");
         }
-        
+
         // Return mock user for development - use consistent UUIDs
         return Ok(AuthenticatedUser {
             user_id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
@@ -267,9 +267,15 @@ pub async fn authenticate_api_key(
 
     // Verify API key using the database function
     let response = client
-        .post(format!("{}/rest/v1/rpc/verify_api_key", config.supabase_url))
+        .post(format!(
+            "{}/rest/v1/rpc/verify_api_key",
+            config.supabase_url
+        ))
         .header("apikey", &config.supabase_service_role_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_role_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_role_key),
+        )
         .header("Content-Type", "application/json")
         .json(&json!({ "key_hash_param": key_hash }))
         .send()
@@ -317,7 +323,7 @@ pub async fn authenticate_api_key(
                     .get("user_email")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-                
+
                 let github_username = result
                     .get("github_username")
                     .and_then(|v| v.as_str())
@@ -356,10 +362,7 @@ pub async fn authenticate_api_key(
 
 /// Ensure user exists in database (for JWT authentication)
 /// This synchronizes GitHub OAuth users with our user table
-pub async fn sync_jwt_user(
-    user: &AuthenticatedUser,
-    config: &AuthConfig,
-) -> Result<(), ApiError> {
+pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Result<(), ApiError> {
     if config.is_development() {
         return Ok(()); // Skip in development
     }
@@ -377,7 +380,10 @@ pub async fn sync_jwt_user(
     let _response = client
         .post(format!("{}/rest/v1/users", config.supabase_url))
         .header("apikey", &config.supabase_service_role_key)
-        .header("Authorization", format!("Bearer {}", config.supabase_service_role_key))
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_role_key),
+        )
         .header("Content-Type", "application/json")
         .header("Prefer", "resolution=merge-duplicates")
         .json(&user_data)

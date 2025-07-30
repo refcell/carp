@@ -9,7 +9,7 @@ mod config;
 mod utils;
 
 use auth::AuthManager;
-use commands::{healthcheck, pull, search, upload};
+use commands::{healthcheck, list, pull, search, upload};
 use utils::error::CarpResult;
 
 #[derive(Parser)]
@@ -29,7 +29,13 @@ struct Cli {
     #[arg(long, global = true, help = "Suppress all output except errors")]
     quiet: bool,
 
-    #[arg(long, global = true, env = "CARP_API_KEY", hide_env_values = true, help = "API key for authentication (can also be set via CARP_API_KEY environment variable)")]
+    #[arg(
+        long,
+        global = true,
+        env = "CARP_API_KEY",
+        hide_env_values = true,
+        help = "API key for authentication (can also be set via CARP_API_KEY environment variable)"
+    )]
     api_key: Option<String>,
 }
 
@@ -37,6 +43,9 @@ struct Cli {
 enum Commands {
     /// Check the health status of the API
     Healthcheck,
+
+    /// List all available agents in the registry
+    List,
 
     /// Search for agents in the registry
     Search {
@@ -52,8 +61,8 @@ enum Commands {
 
     /// Pull an agent from the registry
     Pull {
-        /// Agent name in format 'name' or 'name@version'
-        agent: String,
+        /// Agent name in format 'name' or 'name@version' (optional - if not provided, shows interactive selection)
+        agent: Option<String>,
 
         #[arg(short, long, help = "Target directory")]
         output: Option<String>,
@@ -105,6 +114,7 @@ async fn main() {
 async fn run(cli: Cli) -> CarpResult<()> {
     match cli.command {
         Commands::Healthcheck => healthcheck::execute(cli.verbose).await,
+        Commands::List => list::execute(cli.verbose).await,
         Commands::Search {
             query,
             limit,
@@ -115,14 +125,14 @@ async fn run(cli: Cli) -> CarpResult<()> {
             output,
             force,
         } => pull::execute(agent, output, force, cli.verbose).await,
-        Commands::Upload { directory } => upload::execute(directory, cli.api_key, cli.verbose).await,
-        Commands::Auth { auth_command } => {
-            match auth_command {
-                AuthCommands::SetApiKey => AuthManager::set_api_key().await,
-                AuthCommands::Status => AuthManager::status_with_key(cli.api_key.as_deref()).await,
-                AuthCommands::Logout => AuthManager::logout().await,
-                AuthCommands::Login => AuthManager::login().await,
-            }
+        Commands::Upload { directory } => {
+            upload::execute(directory, cli.api_key, cli.verbose).await
         }
+        Commands::Auth { auth_command } => match auth_command {
+            AuthCommands::SetApiKey => AuthManager::set_api_key().await,
+            AuthCommands::Status => AuthManager::status_with_key(cli.api_key.as_deref()).await,
+            AuthCommands::Logout => AuthManager::logout().await,
+            AuthCommands::Login => AuthManager::login().await,
+        },
     }
 }

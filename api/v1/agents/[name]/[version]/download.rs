@@ -6,13 +6,7 @@ use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
-use shared::{
-    api_key_middleware, check_scope, extract_bearer_token,
-    ApiError, AuthenticatedUser
-};
-
-
-
+use shared::{api_key_middleware, extract_bearer_token, ApiError, AuthenticatedUser};
 
 /// Optional authentication for downloads - allows both authenticated and unauthenticated access
 async fn optional_authenticate(req: &Request) -> Option<AuthenticatedUser> {
@@ -155,14 +149,13 @@ async fn query_agent_info(
     supabase_key: &str,
     name: &str,
     version: &str,
-    authenticated_user: Option<&AuthenticatedUser>,
+    _authenticated_user: Option<&AuthenticatedUser>,
 ) -> AnyhowResult<AgentInfo> {
     let url = format!("{}/rest/v1/rpc/get_agent_download_info", supabase_url);
 
     let payload = json!({
         "p_agent_name": name,
-        "p_version_text": if version == "latest" { "" } else { version },
-        "p_user_id": authenticated_user.map(|u| u.user_id.to_string())
+        "p_version_text": if version == "latest" { "" } else { version }
     });
 
     let response = client
@@ -183,26 +176,7 @@ async fn query_agent_info(
 
     // Parse the result from the database function
     if let Some(data) = result.as_array().and_then(|arr| arr.first()) {
-        // Check if the agent is private and user has access
-        let is_public = data
-            .get("is_public")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        let owner_id = data.get("user_id").and_then(|v| v.as_str());
-
-        if !is_public {
-            match authenticated_user {
-                Some(user) => {
-                    let user_id_str = user.user_id.to_string();
-                    if Some(user_id_str.as_str()) != owner_id && !check_scope(user, "admin") {
-                        return Err(anyhow!("Access denied: This agent is private"));
-                    }
-                }
-                None => {
-                    return Err(anyhow!("Authentication required: This agent is private"));
-                }
-            }
-        }
+        // Database function only returns public agents, so no additional access control needed
         Ok(AgentInfo {
             name: data
                 .get("agent_name")

@@ -47,9 +47,8 @@ impl AgentManifest {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> CarpResult<()> {
         self.validate()?;
 
-        let contents = toml::to_string_pretty(self).map_err(|e| {
-            CarpError::ManifestError(format!("Failed to serialize manifest: {e}"))
-        })?;
+        let contents = toml::to_string_pretty(self)
+            .map_err(|e| CarpError::ManifestError(format!("Failed to serialize manifest: {e}")))?;
 
         fs::write(&path, contents)
             .map_err(|e| CarpError::ManifestError(format!("Failed to write manifest: {e}")))?;

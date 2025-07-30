@@ -2,30 +2,40 @@ use crate::api::ApiClient;
 use crate::config::ConfigManager;
 use crate::utils::error::{CarpError, CarpResult};
 use colored::*;
+use inquire::{InquireError, Select};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Execute the pull command
 pub async fn execute(
-    agent: String,
+    agent: Option<String>,
     output: Option<String>,
     force: bool,
     verbose: bool,
 ) -> CarpResult<()> {
-    let (name, version) = parse_agent_spec(&agent)?;
+    let config = ConfigManager::load_with_env_checks()?;
+    let client = ApiClient::new(&config)?;
+
+    // If no agent specified, show interactive selection
+    let agent_spec = match agent {
+        Some(spec) => spec,
+        None => {
+            if verbose {
+                println!("Fetching available agents for selection...");
+            }
+            interactive_agent_selection(&client).await?
+        }
+    };
+
+    let (name, version) = parse_agent_spec(&agent_spec)?;
 
     if verbose {
         println!(
             "Pulling agent '{}'{}...",
             name,
-            version
-                .map(|v| format!(" version {v}"))
-                .unwrap_or_default()
+            version.map(|v| format!(" version {v}")).unwrap_or_default()
         );
     }
-
-    let config = ConfigManager::load_with_env_checks()?;
-    let client = ApiClient::new(&config)?;
 
     // Get download information
     let download_info = client.get_agent_download(&name, version).await?;
@@ -299,6 +309,107 @@ fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
     }
 
     Ok(())
+}
+
+/// Interactive agent selection using inquire
+async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
+    // Fetch all available agents
+    let response = client.search("", Some(1000), false).await?;
+
+    if response.agents.is_empty() {
+        return Err(CarpError::Api {
+            status: 404,
+            message: "No agents found in the registry.".to_string(),
+        });
+    }
+
+    println!(
+        "{} {} agents available for selection:",
+        "Found".green().bold(),
+        response.agents.len()
+    );
+
+    // Create display options with agent names and descriptions
+    let options: Vec<AgentDisplayOption> = response
+        .agents
+        .into_iter()
+        .map(|agent| AgentDisplayOption {
+            name: agent.name.clone(),
+            version: agent.version.clone(),
+            description: agent.description.clone(),
+            author: agent.author.clone(),
+            download_count: agent.download_count,
+            tags: agent.tags.clone(),
+            display: format!(
+                "{} (v{}) - {} [by {}]",
+                agent.name.bold().blue(),
+                agent.version.dimmed(),
+                agent.description,
+                agent.author.green()
+            ),
+        })
+        .collect();
+
+    let selected = Select::new("Select an agent to pull:", options.clone())
+        .with_page_size(15)
+        .with_help_message("↑/↓ to navigate • Enter to select • Ctrl+C to cancel")
+        .with_formatter(&|i| format!("{}@{}", i.value.name, i.value.version))
+        .prompt()
+        .map_err(|e| match e {
+            InquireError::OperationCanceled => CarpError::Api {
+                status: 0,
+                message: "Operation cancelled by user.".to_string(),
+            },
+            _ => CarpError::Api {
+                status: 500,
+                message: format!("Selection error: {e}"),
+            },
+        })?;
+
+    println!(
+        "\n{} Selected: {} v{}",
+        "✓".green().bold(),
+        selected.name.blue().bold(),
+        selected.version
+    );
+    println!("  {}", selected.description);
+
+    if !selected.tags.is_empty() {
+        print!("  Tags: ");
+        for (i, tag) in selected.tags.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", tag.yellow());
+        }
+        println!();
+    }
+
+    println!(
+        "  By {} • {} views\n",
+        selected.author.green(),
+        selected.download_count.to_string().cyan()
+    );
+
+    Ok(format!("{}@{}", selected.name, selected.version))
+}
+
+/// Helper struct for displaying agent options
+#[derive(Clone)]
+struct AgentDisplayOption {
+    name: String,
+    version: String,
+    description: String,
+    author: String,
+    download_count: u64,
+    tags: Vec<String>,
+    display: String,
+}
+
+impl std::fmt::Display for AgentDisplayOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.display)
+    }
 }
 
 #[cfg(test)]

@@ -45,7 +45,8 @@ impl MockRequest {
     }
 
     pub fn api_key_header(mut self, key: &str) -> Self {
-        self.headers.insert("x-api-key".to_string(), key.to_string());
+        self.headers
+            .insert("x-api-key".to_string(), key.to_string());
         self
     }
 
@@ -173,9 +174,9 @@ mod auth_separation_tests {
     fn test_jwt_only_endpoint_requirements() {
         // Endpoints that should only accept JWT tokens (frontend operations)
         let jwt_only_endpoints = vec![
-            "/v1/auth/api-keys POST",      // Create API key
-            "/profile",                    // User profile
-            "/dashboard",                  // User dashboard
+            "/v1/auth/api-keys POST", // Create API key
+            "/profile",               // User profile
+            "/dashboard",             // User dashboard
         ];
 
         let api_key = "carp_test1234_test5678_test9012";
@@ -193,12 +194,12 @@ mod auth_separation_tests {
     fn test_api_key_only_endpoint_requirements() {
         // Endpoints that should only accept API keys (CLI operations)
         let api_key_only_endpoints = vec![
-            "/v1/agents/upload POST",          // Upload agent
-            "/v1/agents/publish POST",         // Publish agent
+            "/v1/agents/upload POST",                   // Upload agent
+            "/v1/agents/publish POST",                  // Publish agent
             "/v1/agents/{name}/{version}/download GET", // Download agent
-            "/v1/auth/api-keys GET",           // List API keys
-            "/v1/auth/api-keys PUT",           // Update API key
-            "/v1/auth/api-keys DELETE",        // Delete API key
+            "/v1/auth/api-keys GET",                    // List API keys
+            "/v1/auth/api-keys PUT",                    // Update API key
+            "/v1/auth/api-keys DELETE",                 // Delete API key
         ];
 
         let api_key = "carp_test1234_test5678_test9012";
@@ -244,10 +245,7 @@ mod auth_separation_tests {
         assert!(jwt_result.is_ok(), "JWT should work in dev mode");
 
         let jwt_user = jwt_result.unwrap();
-        assert!(matches!(
-            jwt_user.auth_method,
-            AuthMethod::JwtToken { .. }
-        ));
+        assert!(matches!(jwt_user.auth_method, AuthMethod::JwtToken { .. }));
         assert!(jwt_user.scopes.contains(&"api_key_create".to_string()));
 
         // Test API key authentication in dev mode
@@ -255,7 +253,10 @@ mod auth_separation_tests {
         assert!(api_key_result.is_ok(), "API key should work in dev mode");
 
         let api_key_user = api_key_result.unwrap();
-        assert!(matches!(api_key_user.auth_method, AuthMethod::ApiKey { .. }));
+        assert!(matches!(
+            api_key_user.auth_method,
+            AuthMethod::ApiKey { .. }
+        ));
         assert!(api_key_user.scopes.contains(&"upload".to_string()));
 
         // Verify users have the same ID (consistent dev user)
@@ -282,12 +283,12 @@ mod auth_separation_tests {
         }
 
         let invalid_api_keys = vec![
-            "carp_only_two_parts",         // Not enough parts
-            "wrong_prefix_test_test_test", // Wrong prefix
-            "carp_test1234_test5678",      // Only 2 parts after prefix
+            "carp_only_two_parts",                   // Not enough parts
+            "wrong_prefix_test_test_test",           // Wrong prefix
+            "carp_test1234_test5678",                // Only 2 parts after prefix
             "carp_test1234_test5678_test9012_extra", // Too many parts
-            "",                            // Empty string
-            "carp___",                     // Empty parts
+            "",                                      // Empty string
+            "carp___",                               // Empty parts
         ];
 
         for key in invalid_api_keys {

@@ -65,7 +65,10 @@ mod auth_tests {
         let mock_jwt_token = "mock.jwt.token";
 
         let result = authenticate_jwt(mock_jwt_token, &config).await;
-        assert!(result.is_ok(), "JWT authentication should succeed in dev mode");
+        assert!(
+            result.is_ok(),
+            "JWT authentication should succeed in dev mode"
+        );
 
         let user = result.unwrap();
         assert_eq!(
@@ -239,7 +242,10 @@ mod auth_tests {
         // We'll test this when not in development mode
         if !config.is_development() {
             let result = authenticate_api_key(invalid_key, &config).await;
-            assert!(result.is_err(), "Invalid API key should fail authentication");
+            assert!(
+                result.is_err(),
+                "Invalid API key should fail authentication"
+            );
         }
     }
 
@@ -248,7 +254,7 @@ mod auth_tests {
     fn test_bearer_token_extraction_formats() {
         // Note: These tests would require proper HTTP request mocking
         // For now, we test the logic components that don't require full HTTP requests
-        
+
         // Test API key hash generation for various formats
         let api_keys = vec![
             "carp_test1234_test5678_test9012",
@@ -258,9 +264,13 @@ mod auth_tests {
 
         for key in api_keys {
             let hash = hash_api_key(key);
-            assert!(!hash.is_empty(), "Hash should not be empty for key: {}", key);
+            assert!(
+                !hash.is_empty(),
+                "Hash should not be empty for key: {}",
+                key
+            );
             assert_ne!(hash, key, "Hash should differ from original key: {}", key);
-            
+
             // Verify token type detection
             assert_eq!(guess_token_type(key), TokenType::ApiKey);
         }
@@ -270,10 +280,16 @@ mod auth_tests {
     #[test]
     fn test_auth_config_development_detection() {
         let dev_config = AuthTestConfig::default().to_dev_auth_config();
-        assert!(dev_config.is_development(), "Should detect development mode");
+        assert!(
+            dev_config.is_development(),
+            "Should detect development mode"
+        );
 
         let prod_config = AuthTestConfig::default().to_auth_config();
-        assert!(!prod_config.is_development(), "Should detect production mode");
+        assert!(
+            !prod_config.is_development(),
+            "Should detect production mode"
+        );
     }
 
     #[test]
@@ -338,7 +354,10 @@ mod auth_tests {
         // Test deserialization
         let json_str = serialized.unwrap();
         let deserialized: Result<SupabaseJwtClaims, _> = serde_json::from_str(&json_str);
-        assert!(deserialized.is_ok(), "JWT claims should deserialize correctly");
+        assert!(
+            deserialized.is_ok(),
+            "JWT claims should deserialize correctly"
+        );
 
         let deserialized_claims = deserialized.unwrap();
         assert_eq!(deserialized_claims.sub, claims.sub);
@@ -362,7 +381,10 @@ mod auth_tests {
 
         let json_str = serialized.unwrap();
         let deserialized: Result<ApiError, _> = serde_json::from_str(&json_str);
-        assert!(deserialized.is_ok(), "API error should deserialize correctly");
+        assert!(
+            deserialized.is_ok(),
+            "API error should deserialize correctly"
+        );
 
         let deserialized_error = deserialized.unwrap();
         assert_eq!(deserialized_error.error, "test_error");
@@ -383,10 +405,10 @@ mod middleware_tests {
         // Test that auth strategies can be formatted for debugging
         let jwt_only = AuthStrategy::JwtOnly;
         let api_key_only = AuthStrategy::ApiKeyOnly;
-        
+
         let jwt_debug = format!("{:?}", jwt_only);
         let api_key_debug = format!("{:?}", api_key_only);
-        
+
         assert!(jwt_debug.contains("JwtOnly"));
         assert!(api_key_debug.contains("ApiKeyOnly"));
     }
@@ -427,7 +449,10 @@ mod integration_tests {
 
         // Step 3: Use the generated API key for agent operations
         let api_key_user = authenticate_api_key(mock_api_key, &config).await;
-        assert!(api_key_user.is_ok(), "API key authentication should succeed");
+        assert!(
+            api_key_user.is_ok(),
+            "API key authentication should succeed"
+        );
 
         let api_key_user = api_key_user.unwrap();
         assert!(api_key_user.scopes.contains(&"upload".to_string()));
@@ -435,10 +460,13 @@ mod integration_tests {
 
         // Verify the users have the same ID (same actual user, different auth methods)
         assert_eq!(jwt_user.user_id, api_key_user.user_id);
-        
+
         // Verify different authentication methods
         assert!(matches!(jwt_user.auth_method, AuthMethod::JwtToken { .. }));
-        assert!(matches!(api_key_user.auth_method, AuthMethod::ApiKey { .. }));
+        assert!(matches!(
+            api_key_user.auth_method,
+            AuthMethod::ApiKey { .. }
+        ));
     }
 
     // Test authentication separation
@@ -499,14 +527,22 @@ mod integration_tests {
                 assert!(jwt_result.is_err(), "Empty token should fail JWT auth");
             } else {
                 // Most invalid tokens will fail JWT parsing
-                assert!(jwt_result.is_err(), "Invalid token '{}' should fail JWT auth", token);
+                assert!(
+                    jwt_result.is_err(),
+                    "Invalid token '{}' should fail JWT auth",
+                    token
+                );
             }
 
             // Try API key authentication (in production mode, these would fail database lookup)
             // In development mode, they would succeed, so we only test production mode
             if !config.is_development() {
                 let api_key_result = authenticate_api_key(token, &config).await;
-                assert!(api_key_result.is_err(), "Invalid token '{}' should fail API key auth", token);
+                assert!(
+                    api_key_result.is_err(),
+                    "Invalid token '{}' should fail API key auth",
+                    token
+                );
             }
         }
     }

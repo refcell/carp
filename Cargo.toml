@@ -85,6 +85,23 @@ urlencoding = "2.1"
 # YAML parsing
 serde_yaml = "0.9"
 
+[dev-dependencies]
+# Testing dependencies for unit tests
+tokio-test = "0.4"
+wiremock = "0.6"
+mockall = "0.12"
+httpmock = "0.7"
+
+# Additional dependencies for E2E integration tests
+tempfile = "3.0"
+futures = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+zip = { version = "0.6", features = ["deflate", "time"] }
+
+[features]
+# Feature for test runner binary
+test-runner = []
+
 [profile.release]
 lto = true
 codegen-units = 1

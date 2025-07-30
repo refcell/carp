@@ -109,9 +109,12 @@ mod integration_flow_tests {
         // Step 1: User logs in via GitHub OAuth (simulated by JWT authentication)
         let mock_jwt_token = "mock.github.oauth.jwt.token";
         let jwt_result = authenticate_jwt(mock_jwt_token, &auth_config).await;
-        
-        assert!(jwt_result.is_ok(), "GitHub OAuth JWT should authenticate successfully");
-        
+
+        assert!(
+            jwt_result.is_ok(),
+            "GitHub OAuth JWT should authenticate successfully"
+        );
+
         let jwt_user = jwt_result.unwrap();
         assert_eq!(jwt_user.user_id.to_string(), test_config.github_user_id);
         assert!(matches!(jwt_user.auth_method, AuthMethod::JwtToken { .. }));
@@ -122,18 +125,24 @@ mod integration_flow_tests {
         // In development mode, we simulate the API key creation
         let generated_api_key = "carp_dev_test12_test5678_test9012";
         let api_key_hash = hash_api_key(generated_api_key);
-        
+
         assert!(!api_key_hash.is_empty());
         assert_ne!(api_key_hash, generated_api_key);
 
         // Step 3: CLI uses the API key for agent operations
         let api_key_result = authenticate_api_key(generated_api_key, &auth_config).await;
-        
-        assert!(api_key_result.is_ok(), "Generated API key should authenticate successfully");
-        
+
+        assert!(
+            api_key_result.is_ok(),
+            "Generated API key should authenticate successfully"
+        );
+
         let api_key_user = api_key_result.unwrap();
         assert_eq!(api_key_user.user_id, jwt_user.user_id); // Same user
-        assert!(matches!(api_key_user.auth_method, AuthMethod::ApiKey { .. }));
+        assert!(matches!(
+            api_key_user.auth_method,
+            AuthMethod::ApiKey { .. }
+        ));
         assert!(api_key_user.scopes.contains(&"upload".to_string()));
         assert!(api_key_user.scopes.contains(&"publish".to_string()));
 
@@ -157,10 +166,7 @@ mod integration_flow_tests {
             auth_method: AuthMethod::JwtToken {
                 provider: "supabase".to_string(),
             },
-            scopes: vec![
-                "read".to_string(),
-                "api_key_create".to_string(),
-            ],
+            scopes: vec!["read".to_string(), "api_key_create".to_string()],
             metadata: UserMetadata {
                 email: Some(test_config.github_email.clone()),
                 github_username: Some(test_config.github_username.clone()),
@@ -175,7 +181,10 @@ mod integration_flow_tests {
         // Verify user data is consistent
         assert_eq!(jwt_user.user_id.to_string(), test_config.github_user_id);
         assert_eq!(jwt_user.metadata.email, Some(test_config.github_email));
-        assert_eq!(jwt_user.metadata.github_username, Some(test_config.github_username));
+        assert_eq!(
+            jwt_user.metadata.github_username,
+            Some(test_config.github_username)
+        );
     }
 
     /// Test API key lifecycle management
@@ -187,7 +196,7 @@ mod integration_flow_tests {
         // Step 1: Create multiple API keys for the same user
         let api_keys = vec![
             "carp_key1_test1234_test5678",
-            "carp_key2_test1234_test5678", 
+            "carp_key2_test1234_test5678",
             "carp_key3_test1234_test5678",
         ];
 
@@ -196,7 +205,7 @@ mod integration_flow_tests {
         for api_key in &api_keys {
             let result = authenticate_api_key(api_key, &auth_config).await;
             assert!(result.is_ok(), "API key '{}' should authenticate", api_key);
-            
+
             let user = result.unwrap();
             authenticated_users.push(user);
         }
@@ -204,7 +213,10 @@ mod integration_flow_tests {
         // Step 2: Verify all API keys belong to the same user
         let first_user_id = authenticated_users[0].user_id;
         for user in &authenticated_users {
-            assert_eq!(user.user_id, first_user_id, "All API keys should belong to same user");
+            assert_eq!(
+                user.user_id, first_user_id,
+                "All API keys should belong to same user"
+            );
             assert!(matches!(user.auth_method, AuthMethod::ApiKey { .. }));
         }
 
@@ -215,7 +227,7 @@ mod integration_flow_tests {
                 key_ids.insert(key_id);
             }
         }
-        
+
         // In development mode, all keys use the same mock key ID
         // In production, each would have a unique key ID
         if auth_config.is_development() {
@@ -240,7 +252,7 @@ mod integration_flow_tests {
         let invalid_jwt = "invalid.jwt.token";
         let jwt_result = authenticate_jwt(invalid_jwt, &auth_config).await;
         assert!(jwt_result.is_err(), "Invalid JWT should fail");
-        
+
         if let Err(error) = jwt_result {
             assert_eq!(error.error, "invalid_jwt");
             assert!(error.message.contains("Invalid JWT token"));
@@ -252,7 +264,7 @@ mod integration_flow_tests {
         // Test 3: API key authentication without database (production mode)
         let api_key = "carp_test1234_test5678_test9012";
         let api_result = authenticate_api_key(api_key, &auth_config).await;
-        
+
         // In production mode without mock database, this should fail
         if !auth_config.is_development() {
             assert!(api_result.is_err(), "API key should fail without database");
@@ -260,14 +272,22 @@ mod integration_flow_tests {
 
         // Test 4: Malformed tokens
         let malformed_tokens = vec!["", "malformed", "carp_incomplete"];
-        
+
         for token in malformed_tokens {
             let jwt_result = authenticate_jwt(token, &auth_config).await;
             let api_result = authenticate_api_key(token, &auth_config).await;
-            
+
             if !auth_config.is_development() {
-                assert!(jwt_result.is_err(), "Malformed token '{}' should fail JWT", token);
-                assert!(api_result.is_err(), "Malformed token '{}' should fail API key", token);
+                assert!(
+                    jwt_result.is_err(),
+                    "Malformed token '{}' should fail JWT",
+                    token
+                );
+                assert!(
+                    api_result.is_err(),
+                    "Malformed token '{}' should fail API key",
+                    token
+                );
             }
         }
     }
@@ -305,7 +325,10 @@ mod integration_flow_tests {
         let api_results = futures::future::join_all(api_key_tasks).await;
         for result in api_results {
             let auth_result = result.unwrap();
-            assert!(auth_result.is_ok(), "Concurrent API key auth should succeed");
+            assert!(
+                auth_result.is_ok(),
+                "Concurrent API key auth should succeed"
+            );
         }
     }
 
@@ -318,10 +341,10 @@ mod integration_flow_tests {
         // Test JWT authentication (frontend scopes)
         let jwt_result = authenticate_jwt("mock.jwt.token", &auth_config).await;
         assert!(jwt_result.is_ok());
-        
+
         let jwt_user = jwt_result.unwrap();
         let expected_jwt_scopes = vec!["read", "api_key_create", "api_key_manage"];
-        
+
         for scope in expected_jwt_scopes {
             assert!(
                 shared::check_scope(&jwt_user, scope),
@@ -343,10 +366,10 @@ mod integration_flow_tests {
         // Test API key authentication (CLI scopes)
         let api_result = authenticate_api_key("carp_test_key_123", &auth_config).await;
         assert!(api_result.is_ok());
-        
+
         let api_user = api_result.unwrap();
         let expected_api_scopes = vec!["read", "write", "upload", "publish", "admin"];
-        
+
         for scope in expected_api_scopes {
             assert!(
                 shared::check_scope(&api_user, scope),
@@ -378,10 +401,13 @@ mod integration_flow_tests {
 
         // In development mode, both should represent the same user
         assert_eq!(jwt_user.user_id, api_user.user_id);
-        
+
         // Metadata should be consistent
         assert_eq!(jwt_user.metadata.email, api_user.metadata.email);
-        assert_eq!(jwt_user.metadata.github_username, api_user.metadata.github_username);
+        assert_eq!(
+            jwt_user.metadata.github_username,
+            api_user.metadata.github_username
+        );
 
         // Authentication methods should be different
         assert!(matches!(jwt_user.auth_method, AuthMethod::JwtToken { .. }));
@@ -397,7 +423,7 @@ mod integration_flow_tests {
         // Test 1: Very long tokens (potential DoS)
         let long_token = "a".repeat(10000);
         let jwt_result = authenticate_jwt(&long_token, &auth_config).await;
-        
+
         // Should handle gracefully (in dev mode, it succeeds)
         if auth_config.is_development() {
             assert!(jwt_result.is_ok(), "Dev mode should handle long tokens");
@@ -414,11 +440,15 @@ mod integration_flow_tests {
         for token in special_tokens {
             let jwt_result = authenticate_jwt(token, &auth_config).await;
             let api_result = authenticate_api_key(token, &auth_config).await;
-            
+
             // These should be handled gracefully
             if auth_config.is_development() {
                 // Dev mode is permissive for testing
-                assert!(jwt_result.is_ok(), "Dev mode should handle special token: {}", token);
+                assert!(
+                    jwt_result.is_ok(),
+                    "Dev mode should handle special token: {}",
+                    token
+                );
             } else {
                 // Production mode should be more strict
                 // (This would require proper validation in the actual implementation)
@@ -429,8 +459,14 @@ mod integration_flow_tests {
         let jwt_looking_api_key = "carp_eyJhbGci_eyJzdWIi_eyJpc3Mi"; // Looks like JWT but is API key format
         let api_looking_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.carp_fake_jwt_token.signature";
 
-        assert_eq!(shared::guess_token_type(jwt_looking_api_key), shared::TokenType::ApiKey);
-        assert_eq!(shared::guess_token_type(api_looking_jwt), shared::TokenType::Jwt);
+        assert_eq!(
+            shared::guess_token_type(jwt_looking_api_key),
+            shared::TokenType::ApiKey
+        );
+        assert_eq!(
+            shared::guess_token_type(api_looking_jwt),
+            shared::TokenType::Jwt
+        );
     }
 }
 
@@ -446,14 +482,17 @@ mod production_simulation_tests {
 
         // In production-like environment (with non-empty config), authentication should fail
         // without proper database/JWT validation
-        
+
         let invalid_jwt = "invalid.jwt.token";
         let jwt_result = authenticate_jwt(invalid_jwt, &prod_config).await;
         assert!(jwt_result.is_err(), "Invalid JWT should fail in production");
 
         let api_key = "carp_test1234_test5678_test9012";
         let api_result = authenticate_api_key(api_key, &prod_config).await;
-        assert!(api_result.is_err(), "API key should fail without database in production");
+        assert!(
+            api_result.is_err(),
+            "API key should fail without database in production"
+        );
 
         // Verify error messages are appropriate
         if let Err(jwt_error) = jwt_result {
@@ -471,21 +510,21 @@ mod production_simulation_tests {
     #[test]
     fn test_auth_config_validation() {
         let test_config = IntegrationTestConfig::default();
-        
+
         // Test development mode detection
         let dev_config = test_config.to_dev_auth_config();
         assert!(dev_config.is_development());
-        
+
         let prod_config = test_config.to_auth_config();
         assert!(!prod_config.is_development());
-        
+
         // Test config from environment
         let original_debug = env::var("DEBUG_AUTH").ok();
         env::set_var("DEBUG_AUTH", "true");
-        
+
         let env_config = AuthConfig::from_env();
         assert!(env_config.debug_mode);
-        
+
         // Restore environment
         match original_debug {
             Some(val) => env::set_var("DEBUG_AUTH", val),
@@ -501,12 +540,12 @@ mod production_simulation_tests {
 
         // Test that authentication errors contain detailed information
         let result = authenticate_jwt("malformed.jwt", &prod_config).await;
-        
+
         if let Err(error) = result {
             // Error should have structured information
             assert!(!error.error.is_empty());
             assert!(!error.message.is_empty());
-            
+
             // Error details should provide debugging information
             if let Some(details) = error.details {
                 assert!(details.is_object());
@@ -519,7 +558,7 @@ mod production_simulation_tests {
 #[cfg(test)]
 pub async fn run_integration_test_suite() {
     println!("Running authentication integration test suite...");
-    
+
     // This would be called by a test runner to execute all integration tests
     // In practice, cargo test handles this automatically
 }
@@ -538,32 +577,32 @@ mod performance_tests {
         // Benchmark JWT authentication
         let start = Instant::now();
         let iterations = 100;
-        
+
         for i in 0..iterations {
             let token = format!("mock.jwt.token.{}", i);
             let result = authenticate_jwt(&token, &auth_config).await;
             assert!(result.is_ok());
         }
-        
+
         let jwt_duration = start.elapsed();
         let jwt_avg = jwt_duration / iterations;
-        
+
         println!("JWT auth average time: {:?}", jwt_avg);
-        
+
         // Benchmark API key authentication
         let start = Instant::now();
-        
+
         for i in 0..iterations {
             let key = format!("carp_test{:04}_test5678_test9012", i);
             let result = authenticate_api_key(&key, &auth_config).await;
             assert!(result.is_ok());
         }
-        
+
         let api_duration = start.elapsed();
         let api_avg = api_duration / iterations;
-        
+
         println!("API key auth average time: {:?}", api_avg);
-        
+
         // Both should be reasonably fast (under 1ms each in dev mode)
         assert!(jwt_avg.as_millis() < 10, "JWT auth should be fast");
         assert!(api_avg.as_millis() < 10, "API key auth should be fast");

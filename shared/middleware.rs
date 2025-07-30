@@ -160,16 +160,16 @@ async fn authenticate_flexible(
 }
 
 /// Check if user has required scope, returning error response if not
-pub fn require_scope(
-    user: &AuthenticatedUser,
-    required_scope: &str,
-) -> Result<(), Response<Body>> {
+pub fn require_scope(user: &AuthenticatedUser, required_scope: &str) -> Result<(), Response<Body>> {
     if !crate::auth::check_scope(user, required_scope) {
         return Err(create_auth_error(
             403,
             &ApiError {
                 error: "insufficient_scope".to_string(),
-                message: format!("Required scope '{}' not found in user permissions", required_scope),
+                message: format!(
+                    "Required scope '{}' not found in user permissions",
+                    required_scope
+                ),
                 details: Some(json!({
                     "required_scope": required_scope,
                     "user_scopes": user.scopes,
@@ -218,8 +218,11 @@ mod tests {
 
     fn create_mock_request_with_auth(auth_value: &str) -> Request {
         let mut headers = HashMap::new();
-        headers.insert("authorization".to_string(), format!("Bearer {}", auth_value));
-        
+        headers.insert(
+            "authorization".to_string(),
+            format!("Bearer {}", auth_value),
+        );
+
         // This is a simplified mock - in real tests you'd use proper HTTP request builders
         // For now, we'll just test the core logic
         todo!("Implement proper request mocking for tests")
@@ -230,10 +233,10 @@ mod tests {
         // Test that JWT-only authentication rejects API keys
         let api_key = "carp_test1234_test5678_test9012";
         let config = AuthConfig::from_env();
-        
+
         let result = authenticate_jwt_only(api_key, &config).await;
         assert!(result.is_err());
-        
+
         if let Err(response) = result {
             assert_eq!(response.status(), 401);
         }
@@ -244,10 +247,10 @@ mod tests {
         // Test that API key-only authentication rejects JWTs
         let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
         let config = AuthConfig::from_env();
-        
+
         let result = authenticate_api_key_only(jwt, &config).await;
         assert!(result.is_err());
-        
+
         if let Err(response) = result {
             assert_eq!(response.status(), 401);
         }

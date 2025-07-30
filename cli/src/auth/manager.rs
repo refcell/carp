@@ -21,7 +21,7 @@ impl AuthManager {
 
         // Validate the API key format
         ConfigManager::set_api_key_secure(api_key)?;
-        
+
         println!("{}", "API key saved successfully!".green().bold());
         println!("You can now use authenticated commands.");
         Ok(())
@@ -30,13 +30,18 @@ impl AuthManager {
     /// Legacy login method (deprecated)
     #[deprecated(note = "Use set_api_key instead. Username/password authentication is deprecated.")]
     pub async fn login() -> CarpResult<()> {
-        println!("{}", "Username/password login is deprecated.".yellow().bold());
+        println!(
+            "{}",
+            "Username/password login is deprecated.".yellow().bold()
+        );
         println!("Please use API key authentication instead:");
         println!("  Run: carp auth set-api-key");
         println!("  Or: set CARP_API_KEY environment variable");
         println!("  Or: use --api-key command line option");
-        
-        Err(CarpError::Auth("Please use API key authentication instead of username/password".to_string()))
+
+        Err(CarpError::Auth(
+            "Please use API key authentication instead of username/password".to_string(),
+        ))
     }
 
     /// Logout by clearing the stored API key
@@ -69,22 +74,22 @@ impl AuthManager {
     /// Get current authentication status, considering runtime API key
     pub async fn status_with_key(runtime_api_key: Option<&str>) -> CarpResult<()> {
         let config = ConfigManager::load()?;
-        
+
         // Determine which API key to use (runtime takes precedence)
         let api_key = runtime_api_key.or(config.api_key.as_deref());
-        
+
         if api_key.is_some() {
             println!("{}", "Authenticated".green().bold());
             println!("Registry: {}", config.registry_url);
-            
+
             if let Some(key) = api_key {
                 // Show only first and last few characters for security
                 let masked_key = if key.len() > 8 {
-                    format!("{}...{}", &key[..4], &key[key.len()-4..])
+                    format!("{}...{}", &key[..4], &key[key.len() - 4..])
                 } else {
                     "****".to_string()
                 };
-                
+
                 let source = if runtime_api_key.is_some() {
                     "command line/environment"
                 } else {
@@ -112,7 +117,9 @@ impl AuthManager {
             println!("  1. Setting CARP_API_KEY environment variable");
             println!("  2. Using --api-key command line option");
             println!("  3. Running 'carp login' to store API key in config");
-            return Err(CarpError::Auth("No API key provided. Please authenticate to continue.".to_string()));
+            return Err(CarpError::Auth(
+                "No API key provided. Please authenticate to continue.".to_string(),
+            ));
         }
         Ok(())
     }

@@ -3,34 +3,29 @@ use crate::config::ConfigManager;
 use crate::utils::error::CarpResult;
 use colored::*;
 
-/// Execute the search command
-pub async fn execute(
-    query: String,
-    limit: Option<usize>,
-    exact: bool,
-    verbose: bool,
-) -> CarpResult<()> {
+/// Execute the list command to show all available agents
+pub async fn execute(verbose: bool) -> CarpResult<()> {
     if verbose {
-        println!("Searching for agents matching '{query}'...");
+        println!("Fetching all available agents...");
     }
 
     let config = ConfigManager::load_with_env_checks()?;
     let client = ApiClient::new(&config)?;
 
-    let response = client.search(&query, limit, exact).await?;
+    // Use search with empty query to get all agents
+    let response = client.search("", Some(1000), false).await?;
 
     if response.agents.is_empty() {
-        println!("{}", "No agents found matching your search.".yellow());
+        println!("{}", "No agents found in the registry.".yellow());
         return Ok(());
     }
 
     println!(
-        "{} {} agents found:\n",
+        "{} {} agents available:\n",
         "Found".green().bold(),
         response.total
     );
 
-    let agents_count = response.agents.len();
     for agent in &response.agents {
         println!("{} {}", agent.name.bold().blue(), agent.version.dimmed());
         println!("  {}", agent.description);
@@ -64,10 +59,12 @@ pub async fn execute(
         println!();
     }
 
-    if response.total > agents_count {
+    if response.total > response.agents.len() {
         println!(
-            "Showing {} of {} results. Use --limit to see more.",
-            agents_count, response.total
+            "{} Showing {} of {} agents. Some agents may be hidden due to API limits.",
+            "Note:".yellow().bold(),
+            response.agents.len(),
+            response.total
         );
     }
 

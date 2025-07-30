@@ -7,16 +7,8 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
 use shared::{
-    api_key_middleware, jwt_middleware, require_scope,
-    ApiError, AuthenticatedUser, AuthMethod
+    api_key_middleware, jwt_middleware, require_scope, ApiError, AuthMethod, AuthenticatedUser,
 };
-
-
-
-
-
-
-
 
 /// API key information (without the actual key)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,12 +61,12 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
                 Ok(user) => user,
                 Err(error_response) => return Ok(error_response),
             };
-            
+
             // Ensure user has API key creation scope
             if let Err(error_response) = require_scope(&authenticated_user, "api_key_create") {
                 return Ok(error_response);
             }
-            
+
             create_api_key(&req, &authenticated_user).await
         }
         "GET" | "PUT" | "PATCH" | "DELETE" => {
@@ -83,7 +75,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
                 Ok(user) => user,
                 Err(error_response) => return Ok(error_response),
             };
-            
+
             // Ensure user has API key management scope
             if let Err(error_response) = require_scope(&authenticated_user, "api_key_manage") {
                 return Ok(error_response);

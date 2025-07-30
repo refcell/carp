@@ -30,7 +30,7 @@ fn create_security_test_config() -> Config {
 
     Config {
         registry_url: test_config.api_base_url,
-        api_key: None, // Test without api key for security validation
+        api_key: None,   // Test without api key for security validation
         api_token: None, // Test without token for security validation
         timeout: 5,      // Shorter timeout for security tests
         verify_ssl: true,

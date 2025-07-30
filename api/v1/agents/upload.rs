@@ -4,16 +4,8 @@ use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
-use shared::{
-    api_key_middleware, require_scope,
-    ApiError, AuthenticatedUser
-};
 use serde_json::json;
-
-
-
-
-
+use shared::{api_key_middleware, require_scope, ApiError, AuthenticatedUser};
 
 /// Agent metadata returned by the API
 #[derive(Debug, Clone, Serialize, Deserialize)]

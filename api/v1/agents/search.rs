@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
@@ -84,63 +83,128 @@ async fn search_agents_in_db(
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
 
     if supabase_url.is_empty() || supabase_key.is_empty() {
-        // Return mock data if no database configured
-        return Ok(create_mock_agents(query));
+        return Err(Error::from(
+            "Database not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+        ));
     }
 
-    // In production, use proper Supabase client
-    // For now, return mock data that looks realistic
-    Ok(create_mock_agents(query))
+    // Create Supabase client
+    let client = postgrest::Postgrest::new(format!("{}/rest/v1", supabase_url))
+        .insert_header("apikey", &supabase_key)
+        .insert_header("Authorization", format!("Bearer {}", supabase_key));
+
+    // Calculate offset for pagination
+    let offset = (page - 1) * limit;
+
+    // Build query based on search parameters
+    let mut query_builder = client
+        .from("agents")
+        .select("name,version,description,author,created_at,updated_at,download_count,tags,readme,homepage,repository,license");
+
+    // Apply search filter if query is provided
+    if !query.is_empty() {
+        if exact {
+            // Exact match on name
+            query_builder = query_builder.eq("name", query);
+        } else {
+            // Text search across name, description, and tags
+            // Using PostgreSQL full-text search or ILIKE for partial matches
+            query_builder = query_builder.or(format!(
+                "name.ilike.%{}%,description.ilike.%{}%,tags.cs.{{\"{}\"}}",
+                query, query, query
+            ));
+        }
+    }
+
+    // Apply pagination
+    query_builder = query_builder
+        .range(offset, offset + limit - 1)
+        .order("download_count.desc,updated_at.desc");
+
+    // Execute query
+    let response = query_builder
+        .execute()
+        .await
+        .map_err(|e| Error::from(format!("Database query failed: {}", e)))?;
+
+    let body = response
+        .text()
+        .await
+        .map_err(|e| Error::from(format!("Failed to read response: {}", e)))?;
+
+    // Parse response as Vec<Agent>
+    let agents: Vec<Agent> = serde_json::from_str(&body)
+        .map_err(|e| Error::from(format!("Failed to parse agents: {}", e)))?;
+
+    Ok(agents)
 }
 
 async fn get_total_agent_count(query: &str, exact: bool) -> Result<usize, Error> {
-    // In production, query the database for total count
-    // For now, return a reasonable mock count
-    Ok(if query.is_empty() { 150 } else { 10 })
+    // Get database connection
+    let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
+    let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
+
+    if supabase_url.is_empty() || supabase_key.is_empty() {
+        return Err(Error::from(
+            "Database not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+        ));
+    }
+
+    // Create Supabase client
+    let client = postgrest::Postgrest::new(format!("{}/rest/v1", supabase_url))
+        .insert_header("apikey", &supabase_key)
+        .insert_header("Authorization", format!("Bearer {}", supabase_key));
+
+    // Build count query using PostgreSQL COUNT function
+    let mut query_builder = client.from("agents").select("count(*)").single(); // Return single row with count
+
+    // Apply same search filter as main query
+    if !query.is_empty() {
+        if exact {
+            query_builder = query_builder.eq("name", query);
+        } else {
+            query_builder = query_builder.or(format!(
+                "name.ilike.%{}%,description.ilike.%{}%,tags.cs.{{\"{}\"}}",
+                query, query, query
+            ));
+        }
+    }
+
+    // Execute count query
+    let response = query_builder
+        .execute()
+        .await
+        .map_err(|e| Error::from(format!("Database count query failed: {}", e)))?;
+
+    let body = response
+        .text()
+        .await
+        .map_err(|e| Error::from(format!("Failed to read count response: {}", e)))?;
+
+    // Parse count result
+    #[derive(Deserialize)]
+    struct CountResult {
+        count: i64,
+    }
+
+    let count_result: CountResult = serde_json::from_str(&body)
+        .map_err(|e| Error::from(format!("Failed to parse count: {}", e)))?;
+
+    let count = count_result.count.max(0) as usize;
+
+    Ok(count)
 }
 
 fn create_mock_agents(query: &str) -> Vec<Agent> {
     if query.is_empty() {
-        // Return popular agents if no query
-        vec![
-            Agent {
-                name: "text-processor".to_string(),
-                version: "1.2.0".to_string(),
-                description: "Advanced text processing and analysis agent".to_string(),
-                author: "alice".to_string(),
-                created_at: Utc::now() - chrono::Duration::days(30),
-                updated_at: Utc::now() - chrono::Duration::days(5),
-                download_count: 1250,
-                tags: vec!["text".to_string(), "nlp".to_string()],
-                readme: Some(
-                    "# Text Processor\n\nAdvanced text processing capabilities.".to_string(),
-                ),
-                homepage: Some("https://example.com/text-processor".to_string()),
-                repository: Some("https://github.com/alice/text-processor".to_string()),
-                license: Some("MIT".to_string()),
-            },
-            Agent {
-                name: "code-assistant".to_string(),
-                version: "2.1.0".to_string(),
-                description: "AI-powered code review and assistance".to_string(),
-                author: "bob".to_string(),
-                created_at: Utc::now() - chrono::Duration::days(15),
-                updated_at: Utc::now() - chrono::Duration::days(2),
-                download_count: 850,
-                tags: vec!["code".to_string(), "programming".to_string()],
-                readme: None,
-                homepage: None,
-                repository: Some("https://github.com/bob/code-assistant".to_string()),
-                license: Some("Apache-2.0".to_string()),
-            },
-        ]
+        vec![]
     } else {
         // Return filtered results based on query
         vec![Agent {
             name: format!("{}-agent", query),
             version: "1.0.0".to_string(),
             description: format!("Agent for {}", query),
-            author: "community".to_string(),
+            author: format!("{}-author", query),
             created_at: Utc::now() - chrono::Duration::days(7),
             updated_at: Utc::now() - chrono::Duration::days(1),
             download_count: 42,

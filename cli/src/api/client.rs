@@ -93,15 +93,13 @@ impl ApiClient {
         limit: Option<usize>,
         exact: bool,
     ) -> CarpResult<SearchResponse> {
-        // Input validation
-        if query.trim().is_empty() {
-            return Err(CarpError::InvalidAgent(
-                "Search query cannot be empty".to_string(),
-            ));
-        }
-
         let url = format!("{}/api/v1/agents/search", self.base_url);
-        let mut params = vec![("q", query.trim())];
+        let mut params = vec![];
+
+        // Only add query parameter if not empty (empty query lists all agents)
+        if !query.trim().is_empty() {
+            params.push(("q", query.trim()));
+        }
 
         let limit_str;
         if let Some(limit) = limit {
@@ -642,7 +640,7 @@ impl ApiClient {
                 } else {
                     "Authentication failed. Please verify your API key is correct."
                 };
-                
+
                 return Err(CarpError::Auth(format!(
                     "{auth_error}\n\nTo fix this:\n  1. Get your API key from the registry dashboard\n  2. Set it via: carp auth set-api-key\n  3. Or use: --api-key <your-key>\n  4. Or set CARP_API_KEY environment variable"
                 )));
