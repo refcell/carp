@@ -7,7 +7,8 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
 use shared::{
-    api_key_middleware, jwt_middleware, require_scope, ApiError, AuthMethod, AuthenticatedUser,
+    jwt_middleware, require_scope, ApiError, AuthMethod, AuthenticatedUser,
+    extract_bearer_token, guess_token_type, authenticate_jwt, authenticate_api_key, AuthConfig, TokenType,
 };
 
 /// API key information (without the actual key)
@@ -47,6 +48,55 @@ pub struct UpdateApiKeyRequest {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// Try both JWT and API key authentication (flexible approach)
+/// This allows both web users (JWT) and CLI users (API key) to access the same endpoints
+async fn try_flexible_auth(req: &Request) -> Result<AuthenticatedUser, Response<Body>> {
+    let config = AuthConfig::from_env();
+    
+    let token = extract_bearer_token(req).ok_or_else(|| {
+        let error = ApiError {
+            error: "missing_authentication".to_string(),
+            message: "Authentication required. Provide either a JWT token (from web login) or API key.".to_string(),
+            details: Some(serde_json::json!({
+                "accepted_methods": ["jwt_token", "api_key"],
+                "header_formats": [
+                    "Authorization: Bearer <jwt_token>",
+                    "Authorization: Bearer <api_key>",
+                    "X-API-Key: <api_key>"
+                ]
+            })),
+        };
+        Response::builder()
+            .status(401)
+            .header("content-type", "application/json")
+            .header("WWW-Authenticate", "Bearer")
+            .body(serde_json::to_string(&error).unwrap_or_default().into())
+            .unwrap()
+    })?;
+
+    // Try to determine token type and authenticate accordingly
+    match guess_token_type(&token) {
+        TokenType::ApiKey => {
+            authenticate_api_key(&token, &config).await.map_err(|e| {
+                Response::builder()
+                    .status(401)
+                    .header("content-type", "application/json")
+                    .body(serde_json::to_string(&e).unwrap_or_default().into())
+                    .unwrap()
+            })
+        }
+        TokenType::Jwt => {
+            authenticate_jwt(&token, &config).await.map_err(|e| {
+                Response::builder()
+                    .status(401)
+                    .header("content-type", "application/json")  
+                    .body(serde_json::to_string(&e).unwrap_or_default().into())
+                    .unwrap()
+            })
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     run(handler).await
@@ -70,8 +120,9 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
             create_api_key(&req, &authenticated_user).await
         }
         "GET" | "PUT" | "PATCH" | "DELETE" => {
-            // For API key management operations, use API key authentication
-            let authenticated_user = match api_key_middleware(&req).await {
+            // For API key management operations, accept both JWT and API key authentication
+            // This allows both web users (JWT) and CLI users (API key) to manage their keys
+            let authenticated_user = match try_flexible_auth(&req).await {
                 Ok(user) => user,
                 Err(error_response) => return Ok(error_response),
             };
@@ -128,7 +179,11 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
 
     let client = reqwest::Client::new();
 
-    // Query user's API keys
+    // Query user's API keys using service role authentication
+    // We always use the service role key because:
+    // 1. For API key auth: We don't have access to the user's JWT token
+    // 2. For JWT auth: The user's JWT token might not have database access permissions
+    // 3. We filter by user_id and rely on application-level security
     let response = client
         .get(format!("{supabase_url}/rest/v1/api_keys"))
         .header("apikey", &supabase_key)
@@ -137,16 +192,20 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
         .query(&[("user_id", format!("eq.{}", authenticated_user.user_id))])
         .query(&[(
             "select",
-            "id,name,prefix,scopes,is_active,last_used_at,expires_at,created_at",
+            "id,name,key_prefix,scopes,is_active,last_used_at,expires_at,created_at",
         )])
         .send()
         .await?;
 
     if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
         let error = ApiError {
             error: "database_error".to_string(),
             message: "Failed to retrieve API keys".to_string(),
-            details: None,
+            details: Some(serde_json::json!({
+                "supabase_error": error_text,
+                "user_id": authenticated_user.user_id
+            })),
         };
         return Ok(Response::builder()
             .status(500)
@@ -155,13 +214,28 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
     }
 
     let body = response.text().await?;
-    let api_keys: Vec<ApiKeyInfo> = serde_json::from_str(&body)
+    
+    // Handle the case where Supabase returns a different field name
+    let api_keys: Vec<serde_json::Value> = serde_json::from_str(&body)
         .map_err(|_| Error::from("Failed to parse API keys response"))?;
+    
+    // Convert to our expected format, handling field name differences
+    let formatted_keys: Vec<ApiKeyInfo> = api_keys
+        .into_iter()
+        .filter_map(|mut key| {
+            // Handle potential field name differences (prefix vs key_prefix)
+            if let Some(key_prefix) = key.get("key_prefix") {
+                key["prefix"] = key_prefix.clone();
+            }
+            
+            serde_json::from_value(key).ok()
+        })
+        .collect();
 
     Ok(Response::builder()
         .status(200)
         .header("content-type", "application/json")
-        .body(serde_json::to_string(&api_keys)?.into())?)
+        .body(serde_json::to_string(&formatted_keys)?.into())?)
 }
 
 async fn create_api_key(
@@ -379,7 +453,7 @@ async fn delete_api_key(
 ) -> Result<Response<Body>, Error> {
     // Extract key ID from query parameters
     let query = req.uri().query().unwrap_or("");
-    let query_params: std::collections::HashMap<String, String> =
+    let _query_params: std::collections::HashMap<String, String> =
         url::form_urlencoded::parse(query.as_bytes())
             .into_owned()
             .collect();
