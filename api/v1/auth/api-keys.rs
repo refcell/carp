@@ -321,10 +321,12 @@ async fn create_api_key(
     let client = reqwest::Client::new();
 
     // Insert new API key into database
+    // Note: Database has both 'prefix' and 'key_prefix' columns due to migration history
     let insert_data = json!({
         "user_id": authenticated_user.user_id,
         "name": create_request.name,
         "key_hash": key_hash,
+        "prefix": prefix,
         "key_prefix": prefix,
         "scopes": create_request.scopes,
         "expires_at": create_request.expires_at
