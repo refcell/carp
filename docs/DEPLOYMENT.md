@@ -33,7 +33,6 @@ This guide shows how to deploy the Carp API as a serverless function on Vercel.
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
    SUPABASE_JWT_SECRET=your-jwt-secret
-   JWT_SECRET=your-secure-jwt-secret-key
    ```
 
 4. **Deploy**:
@@ -65,7 +64,6 @@ This guide shows how to deploy the Carp API as a serverless function on Vercel.
    vercel env add SUPABASE_URL
    vercel env add SUPABASE_SERVICE_ROLE_KEY  
    vercel env add SUPABASE_JWT_SECRET
-   vercel env add JWT_SECRET
    ```
 
 4. **Redeploy with Environment Variables**:
@@ -82,7 +80,6 @@ This guide shows how to deploy the Carp API as a serverless function on Vercel.
 | `SUPABASE_URL` | Your Supabase project URL | `https://abc123.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key from Supabase | `eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...` |
 | `SUPABASE_JWT_SECRET` | JWT secret from Supabase project settings | `your-jwt-secret` |
-| `JWT_SECRET` | Secret for API token signing | `your-secure-random-string` |
 
 ### Optional Variables
 
@@ -184,7 +181,6 @@ vercel logs https://your-project.vercel.app
    - Add your frontend domain to the list
 
 3. **Authentication Failures**:
-   - Verify `JWT_SECRET` is set correctly
    - Check Supabase JWT secret matches
 
 4. **File Upload Issues**:

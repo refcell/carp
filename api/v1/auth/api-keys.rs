@@ -242,6 +242,10 @@ async fn create_api_key(
     req: &Request,
     authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
+    // Extract the user's JWT token for database operations
+    let user_jwt = extract_bearer_token(req).ok_or_else(|| {
+        Error::from("Missing authorization token")
+    })?;
     // Parse request body
     let body_bytes = req.body();
     let body_str = std::str::from_utf8(body_bytes)
@@ -321,7 +325,7 @@ async fn create_api_key(
         "user_id": authenticated_user.user_id,
         "name": create_request.name,
         "key_hash": key_hash,
-        "key_prefix": prefix,
+        "prefix": prefix,
         "scopes": create_request.scopes,
         "expires_at": create_request.expires_at
     });
@@ -329,7 +333,7 @@ async fn create_api_key(
     let response = client
         .post(format!("{supabase_url}/rest/v1/api_keys"))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {supabase_key}"))
+        .header("Authorization", format!("Bearer {user_jwt}"))
         .header("Content-Type", "application/json")
         .header("Prefer", "return=representation")
         .json(&insert_data)
