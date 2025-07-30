@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/carp.git"
+    "url": "https://github.com/refcell/carp.git"
   },
   "license": "MIT"
 }
