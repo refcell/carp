@@ -313,10 +313,10 @@ fn extract_gzip(content: &[u8], output_dir: &Path) -> CarpResult<()> {
 
 /// Interactive agent selection using inquire
 async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
-    // Fetch all available agents
-    let response = client.search("", Some(1000), false).await?;
-
-    if response.agents.is_empty() {
+    // Step 1: Get unique agent names
+    let agent_names = get_unique_agent_names(client).await?;
+    
+    if agent_names.is_empty() {
         return Err(CarpError::Api {
             status: 404,
             message: "No agents found in the registry.".to_string(),
@@ -324,36 +324,15 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     }
 
     println!(
-        "{} {} agents available for selection:",
+        "{} {} unique agents available:",
         "Found".green().bold(),
-        response.agents.len()
+        agent_names.len()
     );
 
-    // Create display options with agent names and descriptions
-    let options: Vec<AgentDisplayOption> = response
-        .agents
-        .into_iter()
-        .map(|agent| AgentDisplayOption {
-            name: agent.name.clone(),
-            version: agent.version.clone(),
-            description: agent.description.clone(),
-            author: agent.author.clone(),
-            download_count: agent.download_count,
-            tags: agent.tags.clone(),
-            display: format!(
-                "{} (v{}) - {} [by {}]",
-                agent.name.bold().blue(),
-                agent.version.dimmed(),
-                agent.description,
-                agent.author.green()
-            ),
-        })
-        .collect();
-
-    let selected = Select::new("Select an agent to pull:", options.clone())
+    // Step 2: Let user select agent name
+    let selected_agent = Select::new("Select an agent:", agent_names.clone())
         .with_page_size(15)
         .with_help_message("↑/↓ to navigate • Enter to select • Ctrl+C to cancel")
-        .with_formatter(&|i| format!("{}@{}", i.value.name, i.value.version))
         .prompt()
         .map_err(|e| match e {
             InquireError::OperationCanceled => CarpError::Api {
@@ -366,17 +345,130 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
             },
         })?;
 
+    // Step 3: Get versions for selected agent
+    let versions = get_agent_versions(client, &selected_agent).await?;
+    
+    if versions.is_empty() {
+        return Err(CarpError::Api {
+            status: 404,
+            message: format!("No versions found for agent '{}'.", selected_agent),
+        });
+    }
+
+    println!(
+        "\n{} {} versions available for {}:",
+        "Found".green().bold(),
+        versions.len(),
+        selected_agent.blue().bold()
+    );
+
+    // Step 4: Let user select version
+    let selected_version = if versions.len() == 1 {
+        versions[0].clone()
+    } else {
+        Select::new(
+            &format!("Select a version for {}:", selected_agent.blue().bold()),
+            versions.clone()
+        )
+        .with_page_size(15)
+        .with_help_message("↑/↓ to navigate • Enter to select • Ctrl+C to cancel")
+        .prompt()
+        .map_err(|e| match e {
+            InquireError::OperationCanceled => CarpError::Api {
+                status: 0,
+                message: "Operation cancelled by user.".to_string(),
+            },
+            _ => CarpError::Api {
+                status: 500,
+                message: format!("Selection error: {e}"),
+            },
+        })?
+    };
+
     println!(
         "\n{} Selected: {} v{}",
         "✓".green().bold(),
-        selected.name.blue().bold(),
-        selected.version
+        selected_agent.blue().bold(),
+        selected_version
     );
-    println!("  {}", selected.description);
 
-    if !selected.tags.is_empty() {
-        print!("  Tags: ");
-        for (i, tag) in selected.tags.iter().enumerate() {
+    // Step 5: Get and display agent definition
+    if let Ok(agent_info) = get_agent_info(client, &selected_agent, &selected_version).await {
+        display_agent_definition(&agent_info);
+    }
+
+    Ok(format!("{}@{}", selected_agent, selected_version))
+}
+
+/// Get unique agent names from the registry
+async fn get_unique_agent_names(client: &ApiClient) -> CarpResult<Vec<String>> {
+    let response = client.search("", Some(1000), false).await?;
+    
+    let mut unique_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for agent in response.agents {
+        unique_names.insert(agent.name);
+    }
+    
+    let mut names: Vec<String> = unique_names.into_iter().collect();
+    names.sort();
+    Ok(names)
+}
+
+/// Get versions for a specific agent
+async fn get_agent_versions(client: &ApiClient, agent_name: &str) -> CarpResult<Vec<String>> {
+    let response = client.search(agent_name, Some(1000), true).await?;
+    
+    let mut versions: Vec<String> = response.agents
+        .into_iter()
+        .filter(|agent| agent.name == agent_name)
+        .map(|agent| agent.version)
+        .collect();
+    
+    // Sort versions in descending order (latest first)
+    versions.sort_by(|a, b| {
+        // Simple lexicographic comparison for now - could be improved with proper semver
+        b.cmp(a)
+    });
+    
+    Ok(versions)
+}
+
+/// Get detailed agent information
+async fn get_agent_info(client: &ApiClient, name: &str, version: &str) -> CarpResult<crate::api::types::Agent> {
+    let response = client.search(name, Some(1000), true).await?;
+    
+    response.agents
+        .into_iter()
+        .find(|agent| agent.name == name && agent.version == version)
+        .ok_or_else(|| CarpError::Api {
+            status: 404,
+            message: format!("Agent '{}' version '{}' not found", name, version),
+        })
+}
+
+/// Display agent definition information
+fn display_agent_definition(agent: &crate::api::types::Agent) {
+    println!("\n{}", "Agent Definition:".bold().underline());
+    println!("  {}: {}", "Name".bold(), agent.name.blue());
+    println!("  {}: {}", "Version".bold(), agent.version);
+    println!("  {}: {}", "Author".bold(), agent.author.green());
+    println!("  {}: {}", "Description".bold(), agent.description);
+    
+    if let Some(homepage) = &agent.homepage {
+        println!("  {}: {}", "Homepage".bold(), homepage.cyan());
+    }
+    
+    if let Some(repository) = &agent.repository {
+        println!("  {}: {}", "Repository".bold(), repository.cyan());
+    }
+    
+    if let Some(license) = &agent.license {
+        println!("  {}: {}", "License".bold(), license);
+    }
+    
+    if !agent.tags.is_empty() {
+        print!("  {}: ", "Tags".bold());
+        for (i, tag) in agent.tags.iter().enumerate() {
             if i > 0 {
                 print!(", ");
             }
@@ -384,32 +476,19 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
         }
         println!();
     }
-
-    println!(
-        "  By {} • {} views\n",
-        selected.author.green(),
-        selected.download_count.to_string().cyan()
-    );
-
-    Ok(format!("{}@{}", selected.name, selected.version))
-}
-
-/// Helper struct for displaying agent options
-#[derive(Clone)]
-struct AgentDisplayOption {
-    name: String,
-    version: String,
-    description: String,
-    author: String,
-    download_count: u64,
-    tags: Vec<String>,
-    display: String,
-}
-
-impl std::fmt::Display for AgentDisplayOption {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.display)
+    
+    println!("  {}: {}", "Downloads".bold(), agent.download_count.to_string().cyan());
+    println!("  {}: {}", "Created".bold(), agent.created_at.format("%Y-%m-%d %H:%M UTC"));
+    println!("  {}: {}", "Updated".bold(), agent.updated_at.format("%Y-%m-%d %H:%M UTC"));
+    
+    if let Some(readme) = &agent.readme {
+        if !readme.trim().is_empty() {
+            println!("\n{}", "README:".bold().underline());
+            println!("{}", readme);
+        }
     }
+    
+    println!();
 }
 
 #[cfg(test)]

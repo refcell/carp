@@ -21,11 +21,15 @@ async fn optional_authenticate(req: &Request) -> Option<AuthenticatedUser> {
 /// Agent download information
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AgentDownload {
+    pub agent_id: String,
     pub name: String,
+    pub author: String,
     pub version: String,
     pub download_url: String,
+    pub file_size: u64,
     pub checksum: String,
-    pub size: u64,
+    pub content_type: String,
+    pub definition: serde_json::Value,
 }
 
 // ApiError is now imported from shared module
@@ -126,21 +130,28 @@ async fn get_agent_download_info(
     record_download(&client, &supabase_url, &supabase_key, name, version, req).await?;
 
     Ok(AgentDownload {
+        agent_id: agent_info.agent_id,
         name: agent_info.name,
+        author: agent_info.author,
         version: agent_info.version,
         download_url,
+        file_size: agent_info.file_size,
         checksum: agent_info.checksum,
-        size: agent_info.file_size,
+        content_type: "application/zip".to_string(), // Default content type
+        definition: agent_info.definition,
     })
 }
 
 #[derive(Debug)]
 struct AgentInfo {
+    agent_id: String,
     name: String,
+    author: String,
     version: String,
     file_path: String,
     checksum: String,
     file_size: u64,
+    definition: serde_json::Value,
 }
 
 async fn query_agent_info(
@@ -178,10 +189,20 @@ async fn query_agent_info(
     if let Some(data) = result.as_array().and_then(|arr| arr.first()) {
         // Database function only returns public agents, so no additional access control needed
         Ok(AgentInfo {
+            agent_id: data
+                .get("agent_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("Missing agent_id in database response"))?
+                .to_string(),
             name: data
                 .get("agent_name")
                 .and_then(|v| v.as_str())
                 .unwrap_or(name)
+                .to_string(),
+            author: data
+                .get("author")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
                 .to_string(),
             version: data
                 .get("version")
@@ -199,6 +220,10 @@ async fn query_agent_info(
                 .unwrap_or("")
                 .to_string(),
             file_size: data.get("file_size").and_then(|v| v.as_u64()).unwrap_or(0),
+            definition: data
+                .get("definition")
+                .cloned()
+                .unwrap_or(serde_json::json!({})),
         })
     } else {
         Err(anyhow!(
