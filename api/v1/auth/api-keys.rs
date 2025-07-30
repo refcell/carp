@@ -192,7 +192,7 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
         .query(&[("user_id", format!("eq.{}", authenticated_user.user_id))])
         .query(&[(
             "select",
-            "id,name,key_prefix,scopes,is_active,last_used_at,expires_at,created_at",
+            "id,name,prefix,key_prefix,scopes,is_active,last_used_at,expires_at,created_at",
         )])
         .send()
         .await?;
@@ -224,8 +224,12 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
         .into_iter()
         .filter_map(|mut key| {
             // Handle potential field name differences (prefix vs key_prefix)
-            if let Some(key_prefix) = key.get("key_prefix") {
-                key["prefix"] = key_prefix.clone();
+            // Use key_prefix if available, otherwise use prefix
+            if let Some(key_prefix) = key.get("key_prefix").cloned() {
+                key["prefix"] = key_prefix;
+            } else if key.get("prefix").is_none() {
+                // If neither prefix nor key_prefix exists, skip this record
+                return None;
             }
             
             serde_json::from_value(key).ok()
