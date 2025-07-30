@@ -118,9 +118,9 @@ impl AuthManager {
             println!("You can authenticate by:");
             println!("  1. Setting CARP_API_KEY environment variable");
             println!("  2. Using --api-key command line option");
-            println!("  3. Running 'carp login' to store API key in config");
+            println!("  3. Running 'carp auth set-api-key' to store API key in config");
             return Err(CarpError::Auth(
-                "No API key provided. Please authenticate to continue.".to_string(),
+                "No API key configured. Please set your API key via command line, environment variable, or config file.".to_string(),
             ));
         }
         Ok(())

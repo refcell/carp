@@ -268,7 +268,7 @@ pub async fn authenticate_api_key(
     // Verify API key using the database function
     let response = client
         .post(format!(
-            "{}/rest/v1/rpc/verify_api_key",
+            "{}/rest/v1/rpc/validate_api_key",
             config.supabase_url
         ))
         .header("apikey", &config.supabase_service_role_key)
@@ -277,7 +277,7 @@ pub async fn authenticate_api_key(
             format!("Bearer {}", config.supabase_service_role_key),
         )
         .header("Content-Type", "application/json")
-        .json(&json!({ "key_hash_param": key_hash }))
+        .json(&json!({ "api_key_hash": key_hash }))
         .send()
         .await
         .map_err(|e| ApiError {

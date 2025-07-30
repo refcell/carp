@@ -23,8 +23,23 @@ pub async fn execute(
     api_key: Option<String>,
     verbose: bool,
 ) -> CarpResult<()> {
+    // Load config first to get stored API key
+    let config = ConfigManager::load_with_env_checks()?;
+    
+    if verbose {
+        println!("DEBUG: Runtime API key present: {}", api_key.is_some());
+        println!("DEBUG: Stored API key present: {}", config.api_key.is_some());
+    }
+    
+    // Use runtime API key if provided, otherwise use stored API key
+    let effective_api_key = api_key.as_deref().or(config.api_key.as_deref());
+    
+    if verbose {
+        println!("DEBUG: Effective API key present: {}", effective_api_key.is_some());
+    }
+    
     // Ensure user is authenticated (either via API key parameter or stored configuration)
-    AuthManager::ensure_authenticated(api_key.as_deref()).await?;
+    AuthManager::ensure_authenticated(effective_api_key).await?;
 
     // Expand directory path, defaulting to ~/.claude/agents/
     let dir_path = expand_directory_path(directory)?;
@@ -63,7 +78,7 @@ pub async fn execute(
     let agent_content = fs::read_to_string(&selected_agent.path)?;
 
     // Upload the agent
-    upload_agent(&selected_agent, agent_content, api_key, verbose).await?;
+    upload_agent(&selected_agent, agent_content, effective_api_key, verbose, &config).await?;
 
     println!(
         "{} Successfully uploaded agent '{}'",
@@ -230,8 +245,9 @@ fn select_agent(agents: Vec<AgentFile>) -> CarpResult<AgentFile> {
 async fn upload_agent(
     agent: &AgentFile,
     content: String,
-    api_key: Option<String>,
+    api_key: Option<&str>,
     verbose: bool,
+    config: &crate::config::Config,
 ) -> CarpResult<()> {
     if verbose {
         println!("Preparing to upload agent '{}'...", agent.name);
@@ -249,9 +265,8 @@ async fn upload_agent(
         license: Some("MIT".to_string()), // Default license
     };
 
-    // Upload to registry
-    let config = ConfigManager::load_with_env_checks()?;
-    let client = ApiClient::new(&config)?.with_api_key(api_key);
+    // Upload to registry  
+    let client = ApiClient::new(&config)?.with_api_key(api_key.map(|s| s.to_string()));
 
     if verbose {
         println!("Uploading to registry...");
