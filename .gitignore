@@ -35,3 +35,4 @@ PLAN.md
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 .vercel
+.env*.local
