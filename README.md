@@ -9,66 +9,72 @@
 
 ## Overview
 
-Carp is an open-source registry that allows developers to publish, discover, and pull Claude AI agents. The platform consists of a modern web interface, backend API, and a Rust CLI tool for seamless agent management.
+Carp is an open-source registry for discovering, pulling, and publishing Claude AI agents. The platform includes a web interface, serverless REST API, and Rust CLI tool for agent management.
 
 ## Features
 
-- 🔍 **Agent Discovery**: Browse and search through a curated collection of Claude agents
-- 📦 **Package Management**: Use the `carp` CLI tool to pull agents from the registry
-- 🚀 **Publishing**: Easily publish your own agents to share with the community
-- 🌐 **Modern Web Interface**: Clean, responsive design with greenish-blue theme
-- 🔐 **Authentication**: Secure user accounts and agent publishing
+- 🔍 **Agent Discovery**: Browse and search through Claude agents
+- 📦 **CLI Management**: Pull agents from the registry with the `carp` CLI
+- ⬆️ **Agent Upload**: Upload agents to share with the community
+- 🌐 **Web Interface**: Modern React-based frontend
+- 🔐 **API Authentication**: Secure API key-based authentication
 
 ## CLI Tool
-
-The `carp` command-line tool provides a seamless experience for working with Claude agents:
 
 ### Installation
 
 ```bash
-# Install from crates.io (coming soon)
+# Install from crates.io
 cargo install carp-cli
 
 # Or build from source
 git clone https://github.com/refcell/carp
-cd carp
+cd carp/cli
 cargo build --release
 ```
 
 ### Usage
 
 ```bash
-# Search for agents in the registry
+# Check API health
+carp healthcheck
+
+# List all available agents
+carp list
+
+# Search for agents
 carp search <query>
 
-# Pull an agent from the registry
-carp pull <agent-name>
+# Pull an agent (interactive selection if no name provided)
+carp pull [agent-name[@version]]
 
-# Publish your agent to the registry
-carp publish
+# Upload agents from directory
+carp upload --directory ~/.claude/agents/
 
-# Create a new agent template
-carp new <agent-name>
+# Authentication
+carp auth set-api-key
+carp auth status
+carp auth logout
 ```
 
 ## Technology Stack
 
 - **Frontend**: React + TypeScript with Tailwind CSS
-- **Backend**: Rust with modern web frameworks (planned)
+- **Backend**: Serverless Rust API on Vercel
 - **CLI**: Rust with Clap for command parsing
 - **Database**: PostgreSQL with Supabase
-- **Deployment**: Modern cloud infrastructure
+- **Authentication**: API key-based with secure storage
 
 ## Development
 
-This project follows Rust conventions and includes comprehensive tooling:
+This project follows Rust conventions with comprehensive tooling:
 
 ```bash
-# Build the project
+# Build workspace
 just build
 
 # Run tests
-just test
+just tests
 
 # Lint and format
 just lint
