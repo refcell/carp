@@ -133,7 +133,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
             }
 
             match req.method().as_str() {
-                "GET" => list_api_keys(&authenticated_user).await,
+                "GET" => list_api_keys(&req, &authenticated_user).await,
                 "PUT" | "PATCH" => update_api_key(&req, &authenticated_user).await,
                 "DELETE" => delete_api_key(&req, &authenticated_user).await,
                 _ => unreachable!(), // We already matched these methods above
@@ -154,7 +154,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 }
 
-async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Response<Body>, Error> {
+async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) -> Result<Response<Body>, Error> {
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
 
@@ -179,23 +179,38 @@ async fn list_api_keys(authenticated_user: &AuthenticatedUser) -> Result<Respons
 
     let client = reqwest::Client::new();
 
-    // Query user's API keys using service role authentication
-    // We always use the service role key because:
-    // 1. For API key auth: We don't have access to the user's JWT token
-    // 2. For JWT auth: The user's JWT token might not have database access permissions
-    // 3. We filter by user_id and rely on application-level security
-    let response = client
+    // Extract the original token to determine authentication method
+    let user_token = extract_bearer_token(req);
+    
+    // For JWT authentication, use the user's token to respect RLS policies
+    // For API key authentication, use service role with application-level filtering
+    let (auth_header, needs_user_filter) = match &authenticated_user.auth_method {
+        AuthMethod::JwtToken { .. } if user_token.is_some() => {
+            // Use user's JWT token to leverage RLS policies
+            (format!("Bearer {}", user_token.unwrap()), false)
+        }
+        _ => {
+            // Use service role and filter by user_id at application level
+            (format!("Bearer {supabase_key}"), true)
+        }
+    };
+
+    let mut query_builder = client
         .get(format!("{supabase_url}/rest/v1/api_keys"))
         .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {supabase_key}"))
+        .header("Authorization", auth_header)
         .header("Content-Type", "application/json")
-        .query(&[("user_id", format!("eq.{}", authenticated_user.user_id))])
         .query(&[(
             "select",
             "id,name,prefix,key_prefix,scopes,is_active,last_used_at,expires_at,created_at",
-        )])
-        .send()
-        .await?;
+        )]);
+
+    // Only add user_id filter when using service role (RLS won't handle it)
+    if needs_user_filter {
+        query_builder = query_builder.query(&[("user_id", format!("eq.{}", authenticated_user.user_id))]);
+    }
+
+    let response = query_builder.send().await?;
 
     if !response.status().is_success() {
         let error_text = response.text().await.unwrap_or_default();
