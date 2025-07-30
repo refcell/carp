@@ -132,7 +132,7 @@ async fn run(cli: Cli) -> CarpResult<()> {
             AuthCommands::SetApiKey => AuthManager::set_api_key().await,
             AuthCommands::Status => AuthManager::status_with_key(cli.api_key.as_deref()).await,
             AuthCommands::Logout => AuthManager::logout().await,
-            AuthCommands::Login => AuthManager::login().await,
+            AuthCommands::Login => AuthManager::set_api_key().await,
         },
     }
 }

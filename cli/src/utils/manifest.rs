@@ -32,6 +32,7 @@ pub struct AgentManifest {
 
 impl AgentManifest {
     /// Load manifest from a TOML file
+    #[allow(dead_code)]
     pub fn load<P: AsRef<Path>>(path: P) -> CarpResult<Self> {
         let contents = fs::read_to_string(&path)
             .map_err(|e| CarpError::ManifestError(format!("Failed to read manifest: {e}")))?;
@@ -44,6 +45,7 @@ impl AgentManifest {
     }
 
     /// Save manifest to a TOML file
+    #[allow(dead_code)]
     pub fn save<P: AsRef<Path>>(&self, path: P) -> CarpResult<()> {
         self.validate()?;
 
@@ -57,6 +59,7 @@ impl AgentManifest {
     }
 
     /// Validate the manifest
+    #[allow(dead_code)]
     pub fn validate(&self) -> CarpResult<()> {
         if self.name.is_empty() {
             return Err(CarpError::ManifestError(
@@ -108,6 +111,7 @@ impl AgentManifest {
     }
 
     /// Create a default manifest template
+    #[allow(dead_code)]
     pub fn template(name: &str) -> Self {
         Self {
             name: name.to_string(),

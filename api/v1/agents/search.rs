@@ -4,7 +4,26 @@ use std::collections::HashMap;
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
-/// Agent metadata returned by the API
+/// Database agent structure (matches actual DB schema)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DbAgent {
+    pub name: String,
+    #[serde(rename = "current_version")]
+    pub version: String,
+    pub description: String,
+    #[serde(rename = "author_name")]
+    pub author_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub download_count: u64,
+    pub tags: Option<Vec<String>>,
+    pub readme: Option<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+}
+
+/// Agent metadata returned by the API (matches expected client schema)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub name: String,
@@ -19,6 +38,25 @@ pub struct Agent {
     pub homepage: Option<String>,
     pub repository: Option<String>,
     pub license: Option<String>,
+}
+
+impl From<DbAgent> for Agent {
+    fn from(db_agent: DbAgent) -> Self {
+        Agent {
+            name: db_agent.name,
+            version: db_agent.version,
+            description: db_agent.description,
+            author: db_agent.author_name.unwrap_or_else(|| "Unknown".to_string()),
+            created_at: db_agent.created_at,
+            updated_at: db_agent.updated_at,
+            download_count: db_agent.download_count,
+            tags: db_agent.tags.unwrap_or_else(Vec::new),
+            readme: db_agent.readme,
+            homepage: db_agent.homepage,
+            repository: db_agent.repository,
+            license: db_agent.license,
+        }
+    }
 }
 
 /// Search results from the API
@@ -80,26 +118,30 @@ async fn search_agents_in_db(
 ) -> Result<Vec<Agent>, Error> {
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
-    let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
+    // For public search operations, use anon key for proper public access
+    let supabase_key = env::var("SUPABASE_ANON_KEY")
+        .or_else(|_| env::var("SUPABASE_SERVICE_ROLE_KEY"))
+        .unwrap_or_default();
 
     if supabase_url.is_empty() || supabase_key.is_empty() {
         return Err(Error::from(
-            "Database not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+            "Database not configured - missing SUPABASE_URL or SUPABASE_ANON_KEY",
         ));
     }
 
-    // Create Supabase client
-    let client = postgrest::Postgrest::new(format!("{}/rest/v1", supabase_url))
-        .insert_header("apikey", &supabase_key)
-        .insert_header("Authorization", format!("Bearer {}", supabase_key));
+    // Create Supabase client for public read access (search endpoint should be public)
+    // Use only apikey header, no Authorization Bearer token needed for public reads
+    let client = postgrest::Postgrest::new(format!("{supabase_url}/rest/v1"))
+        .insert_header("apikey", &supabase_key);
 
     // Calculate offset for pagination
     let offset = (page - 1) * limit;
 
     // Build query based on search parameters
+    // Note: Using actual database column names
     let mut query_builder = client
         .from("agents")
-        .select("name,version,description,author,created_at,updated_at,download_count,tags,readme,homepage,repository,license");
+        .select("name,current_version,description,author_name,created_at,updated_at,download_count,tags,readme,homepage,repository,license");
 
     // Apply search filter if query is provided
     if !query.is_empty() {
@@ -107,12 +149,9 @@ async fn search_agents_in_db(
             // Exact match on name
             query_builder = query_builder.eq("name", query);
         } else {
-            // Text search across name, description, and tags
-            // Using PostgreSQL full-text search or ILIKE for partial matches
-            query_builder = query_builder.or(format!(
-                "name.ilike.%{}%,description.ilike.%{}%,tags.cs.{{\"{}\"}}",
-                query, query, query
-            ));
+            // Text search across name and description using proper PostgREST syntax
+            query_builder = query_builder
+                .or(format!("name.ilike.*{query}*,description.ilike.*{query}*"));
         }
     }
 
@@ -125,16 +164,18 @@ async fn search_agents_in_db(
     let response = query_builder
         .execute()
         .await
-        .map_err(|e| Error::from(format!("Database query failed: {}", e)))?;
+        .map_err(|e| Error::from(format!("Database query failed: {e}")))?;
 
     let body = response
         .text()
         .await
-        .map_err(|e| Error::from(format!("Failed to read response: {}", e)))?;
+        .map_err(|e| Error::from(format!("Failed to read response: {e}")))?;
 
-    // Parse response as Vec<Agent>
-    let agents: Vec<Agent> = serde_json::from_str(&body)
-        .map_err(|e| Error::from(format!("Failed to parse agents: {}", e)))?;
+    // Parse response as Vec<DbAgent> then convert to Vec<Agent>
+    let db_agents: Vec<DbAgent> = serde_json::from_str(&body)
+        .map_err(|e| Error::from(format!("Failed to parse agents: {e}")))?;
+
+    let agents: Vec<Agent> = db_agents.into_iter().map(Agent::from).collect();
 
     Ok(agents)
 }
@@ -142,31 +183,33 @@ async fn search_agents_in_db(
 async fn get_total_agent_count(query: &str, exact: bool) -> Result<usize, Error> {
     // Get database connection
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
-    let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
+    // For public search operations, use anon key for proper public access
+    let supabase_key = env::var("SUPABASE_ANON_KEY")
+        .or_else(|_| env::var("SUPABASE_SERVICE_ROLE_KEY"))
+        .unwrap_or_default();
 
     if supabase_url.is_empty() || supabase_key.is_empty() {
         return Err(Error::from(
-            "Database not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+            "Database not configured - missing SUPABASE_URL or SUPABASE_ANON_KEY",
         ));
     }
 
-    // Create Supabase client
-    let client = postgrest::Postgrest::new(format!("{}/rest/v1", supabase_url))
-        .insert_header("apikey", &supabase_key)
-        .insert_header("Authorization", format!("Bearer {}", supabase_key));
+    // Create Supabase client for public read access (search endpoint should be public)
+    // Use only apikey header, no Authorization Bearer token needed for public reads
+    let client = postgrest::Postgrest::new(format!("{supabase_url}/rest/v1"))
+        .insert_header("apikey", &supabase_key);
 
-    // Build count query using PostgreSQL COUNT function
-    let mut query_builder = client.from("agents").select("count(*)").single(); // Return single row with count
+    // Build count query using PostgREST's exact_count feature
+    let mut query_builder = client.from("agents").select("id").exact_count();
 
     // Apply same search filter as main query
     if !query.is_empty() {
         if exact {
             query_builder = query_builder.eq("name", query);
         } else {
-            query_builder = query_builder.or(format!(
-                "name.ilike.%{}%,description.ilike.%{}%,tags.cs.{{\"{}\"}}",
-                query, query, query
-            ));
+            // Use proper PostgREST text search syntax
+            query_builder = query_builder
+                .or(format!("name.ilike.*{query}*,description.ilike.*{query}*"));
         }
     }
 
@@ -174,45 +217,33 @@ async fn get_total_agent_count(query: &str, exact: bool) -> Result<usize, Error>
     let response = query_builder
         .execute()
         .await
-        .map_err(|e| Error::from(format!("Database count query failed: {}", e)))?;
+        .map_err(|e| Error::from(format!("Database count query failed: {e}")))?;
 
-    let body = response
-        .text()
-        .await
-        .map_err(|e| Error::from(format!("Failed to read count response: {}", e)))?;
-
-    // Parse count result
-    #[derive(Deserialize)]
-    struct CountResult {
-        count: i64,
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(Error::from(format!(
+            "Database query failed with status {status}: {error_text}"
+        )));
     }
 
-    let count_result: CountResult = serde_json::from_str(&body)
-        .map_err(|e| Error::from(format!("Failed to parse count: {}", e)))?;
-
-    let count = count_result.count.max(0) as usize;
-
-    Ok(count)
-}
-
-fn create_mock_agents(query: &str) -> Vec<Agent> {
-    if query.is_empty() {
-        vec![]
-    } else {
-        // Return filtered results based on query
-        vec![Agent {
-            name: format!("{}-agent", query),
-            version: "1.0.0".to_string(),
-            description: format!("Agent for {}", query),
-            author: format!("{}-author", query),
-            created_at: Utc::now() - chrono::Duration::days(7),
-            updated_at: Utc::now() - chrono::Duration::days(1),
-            download_count: 42,
-            tags: vec![query.to_string()],
-            readme: None,
-            homepage: None,
-            repository: None,
-            license: Some("MIT".to_string()),
-        }]
+    // PostgREST returns the count in the Content-Range header when using exact_count
+    if let Some(content_range) = response.headers().get("content-range") {
+        if let Ok(range_str) = content_range.to_str() {
+            // Parse the content-range header to get total count
+            // Format: "0-4/5" where 5 is the total count, or "*/0" if no records
+            if let Some(total_str) = range_str.split('/').nth(1) {
+                if let Ok(count) = total_str.parse::<usize>() {
+                    return Ok(count);
+                }
+            }
+        }
     }
+
+    // Fallback to 0 if count parsing fails
+    Ok(0)
 }
+

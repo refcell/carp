@@ -21,6 +21,7 @@ pub enum CarpError {
     /// API errors with status code and message
     Api { status: u16, message: String },
     /// Agent not found
+    #[allow(dead_code)]
     AgentNotFound(String),
     /// Invalid agent name or version
     InvalidAgent(String),

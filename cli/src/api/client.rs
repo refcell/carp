@@ -232,6 +232,7 @@ impl ApiClient {
     }
 
     /// Publish an agent to the registry (currently disabled for security)
+    #[allow(dead_code)]
     pub async fn publish(
         &self,
         _request: PublishRequest,
@@ -297,6 +298,7 @@ impl ApiClient {
     }
 
     /// Authenticate with the registry
+    #[allow(dead_code)]
     pub async fn authenticate(&self, username: &str, password: &str) -> CarpResult<AuthResponse> {
         // Input validation
         if username.trim().is_empty() {

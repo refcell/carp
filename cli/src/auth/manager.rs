@@ -29,6 +29,7 @@ impl AuthManager {
 
     /// Legacy login method (deprecated)
     #[deprecated(note = "Use set_api_key instead. Username/password authentication is deprecated.")]
+    #[allow(dead_code)]
     pub async fn login() -> CarpResult<()> {
         println!(
             "{}",
@@ -67,6 +68,7 @@ impl AuthManager {
     }
 
     /// Get current authentication status
+    #[allow(dead_code)]
     pub async fn status() -> CarpResult<()> {
         Self::status_with_key(None).await
     }

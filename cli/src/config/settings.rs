@@ -359,6 +359,7 @@ impl ConfigManager {
     }
 
     /// Update the API key in the config
+    #[allow(dead_code)]
     pub fn set_api_key(api_key: String) -> CarpResult<()> {
         let mut config = Self::load()?;
         config.api_key = Some(api_key);
@@ -376,17 +377,20 @@ impl ConfigManager {
 
     /// Legacy method for backward compatibility
     #[deprecated(note = "Use set_api_key instead")]
+    #[allow(dead_code)]
     pub fn set_api_token(token: String) -> CarpResult<()> {
         Self::set_api_key(token)
     }
 
     /// Legacy method for backward compatibility
     #[deprecated(note = "Use clear_api_key instead")]
+    #[allow(dead_code)]
     pub fn clear_api_token() -> CarpResult<()> {
         Self::clear_api_key()
     }
 
     /// Get the cache directory for storing downloaded agents
+    #[allow(dead_code)]
     pub fn cache_dir() -> CarpResult<PathBuf> {
         let cache_dir = dirs::cache_dir()
             .ok_or_else(|| CarpError::Config("Unable to find cache directory".to_string()))?;
@@ -469,11 +473,13 @@ impl ConfigManager {
 
     /// Legacy method for backward compatibility
     #[deprecated(note = "Use set_api_key_secure instead")]
+    #[allow(dead_code)]
     pub fn set_api_token_secure(token: String) -> CarpResult<()> {
         Self::set_api_key_secure(token)
     }
 
     /// Export configuration template for deployment
+    #[allow(dead_code)]
     pub fn export_template() -> CarpResult<String> {
         let template_config = Config {
             registry_url: "${CARP_REGISTRY_URL:-https://api.carp.refcell.org}".to_string(),
@@ -496,6 +502,7 @@ impl ConfigManager {
     }
 
     /// Validate configuration file without loading sensitive data
+    #[allow(dead_code)]
     pub fn validate_config_file(path: &PathBuf) -> CarpResult<()> {
         if !path.exists() {
             return Err(CarpError::Config(format!(

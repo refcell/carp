@@ -81,7 +81,7 @@ pub async fn authenticate_request(
     if matches!(user.auth_method, crate::auth::AuthMethod::JwtToken { .. }) {
         if let Err(sync_error) = sync_jwt_user(&user, &config).await {
             if config.debug_mode {
-                eprintln!("DEBUG: User sync failed (non-fatal): {:?}", sync_error);
+                eprintln!("DEBUG: User sync failed (non-fatal): {sync_error:?}");
             }
             // Don't fail authentication for sync errors, just log them
         }
@@ -160,6 +160,7 @@ async fn authenticate_flexible(
 }
 
 /// Check if user has required scope, returning error response if not
+#[allow(clippy::result_large_err)]
 pub fn require_scope(user: &AuthenticatedUser, required_scope: &str) -> Result<(), Response<Body>> {
     if !crate::auth::check_scope(user, required_scope) {
         return Err(create_auth_error(
@@ -167,8 +168,7 @@ pub fn require_scope(user: &AuthenticatedUser, required_scope: &str) -> Result<(
             &ApiError {
                 error: "insufficient_scope".to_string(),
                 message: format!(
-                    "Required scope '{}' not found in user permissions",
-                    required_scope
+                    "Required scope '{required_scope}' not found in user permissions"
                 ),
                 details: Some(json!({
                     "required_scope": required_scope,

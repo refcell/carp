@@ -150,7 +150,7 @@ pub async fn validate_jwt_token(
     let token_data =
         decode::<SupabaseJwtClaims>(token, &decoding_key, &validation).map_err(|e| {
             if config.debug_mode {
-                eprintln!("DEBUG: JWT validation failed: {}", e);
+                eprintln!("DEBUG: JWT validation failed: {e}");
             }
             ApiError {
                 error: "invalid_jwt".to_string(),
