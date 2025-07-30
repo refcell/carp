@@ -5,9 +5,11 @@ Command-line tool for the Claude Agent Registry Portal (Carp).
 ## Features
 
 - **Search Agents**: Find agents in the registry with powerful search functionality
+- **List Agents**: Browse all available agents in the registry
 - **Pull Agents**: Download and extract agents locally for use
-- **Publish Agents**: Package and upload your agents to the registry
-- **Create Templates**: Generate new agent projects with built-in templates
+- **Upload Agents**: Upload your agents to the registry
+- **Health Checks**: Verify API connectivity and status
+- **Authentication**: Manage API keys for registry access
 
 ## Installation
 
@@ -21,13 +23,40 @@ just build-cli
 
 The binary will be available at `cli/target/release/carp`.
 
-### From Crates.io (Coming Soon)
+### From Crates.io
 
 ```bash
 cargo install carp-cli
 ```
 
 ## Usage
+
+### Health Check
+
+```bash
+# Check API connectivity and status
+carp healthcheck
+```
+
+### Authentication
+
+```bash
+# Login with API key
+carp auth login
+
+# Check authentication status
+carp auth status
+
+# Logout (clear stored API key)
+carp auth logout
+```
+
+### List All Agents
+
+```bash
+# List all available agents
+carp list
+```
 
 ### Search for Agents
 
@@ -45,7 +74,10 @@ carp search "my-agent" --exact
 ### Pull an Agent
 
 ```bash
-# Pull latest version
+# Interactive selection (shows available agents)
+carp pull
+
+# Pull specific agent (latest version)
 carp pull agent-name
 
 # Pull specific version
@@ -58,35 +90,14 @@ carp pull agent-name --output ./my-agents/
 carp pull agent-name --force
 ```
 
-### Create a New Agent
+### Upload an Agent
 
 ```bash
-# Create basic agent template
-carp new my-agent
+# Upload from current directory (requires Carp.toml)
+carp upload
 
-# Create with specific template
-carp new my-agent --template python
-
-# Create in specific directory
-carp new my-agent --path ./projects/my-agent
-
-# Available templates: basic, advanced, python
-```
-
-### Publish an Agent
-
-```bash
-# Publish from current directory (requires Carp.toml)
-carp publish
-
-# Publish with specific manifest
-carp publish --manifest ./path/to/Carp.toml
-
-# Dry run (validate without publishing)
-carp publish --dry-run
-
-# Skip confirmation prompts
-carp publish --yes
+# Upload from specific directory
+carp upload --directory ./path/to/agent
 ```
 
 ## Configuration
@@ -94,11 +105,12 @@ carp publish --yes
 Configuration is stored in `~/.config/carp/config.toml`:
 
 ```toml
-registry_url = "https://api.carp.refcell.org"
-api_token = "your-api-token"
-timeout = 30
-verify_ssl = true
-default_output_dir = "/path/to/agents"
+api_key = "your-api-key"
+```
+
+You can also set the API key via environment variable:
+```bash
+export CARP_API_KEY="your-api-key"
 ```
 
 ## Agent Manifest (Carp.toml)
@@ -109,22 +121,9 @@ version = "1.0.0"
 description = "A Claude AI agent that does amazing things"
 author = "Your Name <your.email@example.com>"
 license = "MIT"
-homepage = "https://github.com/username/my-agent"
-repository = "https://github.com/username/my-agent"
 tags = ["claude", "ai", "automation"]
-
-files = [
-    "README.md",
-    "agent.py",
-    "config.toml",
-    "src/"
-]
-
+files = ["README.md", "agent.py"]
 main = "agent.py"
-
-[dependencies]
-# Optional: dependencies on other agents
-# other-agent = "1.0.0"
 ```
 
 ## Development
@@ -153,6 +152,12 @@ just lint-cli
 just fmt-cli
 ```
 
+### All Checks
+
+```bash
+just check-cli  # Runs lint, test, and build
+```
+
 ## Security
 
 The Carp CLI includes several security features:
@@ -172,10 +177,11 @@ src/
 ├── main.rs              # CLI entry point and argument parsing
 ├── lib.rs              # Library exports
 ├── commands/           # Command implementations
+│   ├── healthcheck.rs  # API health check
+│   ├── list.rs         # List all agents
 │   ├── search.rs       # Agent search functionality
 │   ├── pull.rs         # Agent download and extraction
-│   ├── publish.rs      # Agent packaging and upload
-│   └── new.rs          # Template generation
+│   └── upload.rs       # Agent upload functionality
 ├── config/             # Configuration management
 ├── api/                # HTTP client for registry API
 ├── auth/               # Authentication handling
@@ -189,8 +195,9 @@ The CLI provides comprehensive error handling with user-friendly messages:
 - Network connectivity issues
 - Authentication failures
 - File system errors
-- Manifest validation errors
+- Agent manifest validation errors
 - API rate limiting and server errors
+- ZIP extraction and path traversal protection
 
 ## Contributing
 
@@ -198,9 +205,10 @@ This CLI tool follows Rust best practices:
 
 - MSRV: 1.82
 - No warnings policy (clippy warnings treated as errors)
-- Comprehensive error handling
-- Security-first design
-- Full test coverage (coming soon)
+- Comprehensive error handling with `anyhow`
+- Security-first design with input validation
+- Type-safe APIs and strong typing
+- Performance-conscious implementation
 
 ## License
 

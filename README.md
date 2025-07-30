@@ -36,6 +36,11 @@ cargo build --release
 ### Usage
 
 ```bash
+# Global flags (available for all commands)
+carp --verbose <command>    # Enable verbose output
+carp --quiet <command>      # Suppress all output except errors
+carp --api-key <key> <command>  # Provide API key (or use CARP_API_KEY env var)
+
 # Check API health
 carp healthcheck
 
@@ -44,17 +49,21 @@ carp list
 
 # Search for agents
 carp search <query>
+carp search <query> --limit 10
+carp search <query> --exact
 
 # Pull an agent (interactive selection if no name provided)
 carp pull [agent-name[@version]]
+carp pull agent-name --output ./output/
+carp pull agent-name --force
 
-# Upload agents from directory
+# Upload agents from directory (prompts for directory if not provided)
 carp upload --directory ~/.claude/agents/
 
-# Authentication
-carp auth set-api-key
-carp auth status
-carp auth logout
+# Authentication commands
+carp auth login     # Login with API key
+carp auth status    # Show authentication status
+carp auth logout    # Clear stored API key (logout)
 ```
 
 ## Technology Stack
@@ -71,14 +80,14 @@ This project follows Rust conventions with comprehensive tooling:
 
 ```bash
 # Build workspace
-just build
+just b
 
 # Run tests
-just tests
+just t
 
 # Lint and format
-just lint
-just fmt
+just l
+just f
 ```
 
 ## Contributing
