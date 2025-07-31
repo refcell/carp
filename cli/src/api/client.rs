@@ -658,18 +658,32 @@ impl ApiClient {
 
             // Try to parse as API error, fallback to generic error
             match serde_json::from_str::<ApiError>(&text) {
-                Ok(api_error) => Err(CarpError::Api {
-                    status: status.as_u16(),
-                    message: api_error.message,
-                }),
-                Err(_) => Err(CarpError::Api {
-                    status: status.as_u16(),
-                    message: if text.is_empty() {
+                Ok(api_error) => {
+                    let mut error_message = api_error.message;
+                    
+                    // Add detailed information if available
+                    if let Some(details) = api_error.details {
+                        error_message.push_str(&format!("\n\nDetails: {}", serde_json::to_string_pretty(&details).unwrap_or_default()));
+                    }
+                    
+                    Err(CarpError::Api {
+                        status: status.as_u16(),
+                        message: error_message,
+                    })
+                },
+                Err(_) => {
+                    // For detailed debugging, show the raw response
+                    let error_message = if text.is_empty() {
                         format!("HTTP {} error", status.as_u16())
                     } else {
-                        text
-                    },
-                }),
+                        format!("HTTP {} error: {}", status.as_u16(), text)
+                    };
+                    
+                    Err(CarpError::Api {
+                        status: status.as_u16(),
+                        message: error_message,
+                    })
+                },
             }
         }
     }
