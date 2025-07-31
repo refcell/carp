@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Agent } from '@/hooks/useAgents';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +12,7 @@ interface AgentCardProps {
   showAuthor?: boolean;
 }
 
-export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps) {
+const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps) {
   return (
     <Card 
       className="cursor-pointer hover:shadow-md transition-all duration-200 h-full flex flex-col lg:min-h-0"
@@ -75,4 +76,6 @@ export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps)
       </CardContent>
     </Card>
   );
-}
+});
+
+export { AgentCard };

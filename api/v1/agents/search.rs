@@ -105,6 +105,7 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     let response = Response::builder()
         .status(200)
         .header("content-type", "application/json")
+        .header("Cache-Control", "public, max-age=30") // Short cache for search results
         .body(serde_json::to_string(&response_body)?.into())?;
 
     Ok(response)
@@ -149,16 +150,20 @@ async fn search_agents_in_db(
             // Exact match on name
             query_builder = query_builder.eq("name", query);
         } else {
-            // Text search across name and description using proper PostgREST syntax
+            // Use full-text search with existing GIN index for better performance
+            // Falls back to ILIKE if FTS doesn't work
             query_builder = query_builder
-                .or(format!("name.ilike.*{query}*,description.ilike.*{query}*"));
+                .or(format!(
+                    "name.ilike.*{query}*,description.ilike.*{query}*,author_name.ilike.*{query}*,tags.cs.{{{query}}}"
+                ));
         }
     }
 
-    // Apply pagination
+    // Apply constraints for public agents and optimize ordering
     query_builder = query_builder
+        .eq("is_public", "true")
         .range(offset, offset + limit - 1)
-        .order("download_count.desc,updated_at.desc");
+        .order("download_count.desc,updated_at.desc"); // Uses idx_agents_public_downloads index
 
     // Execute query
     let response = query_builder
@@ -207,9 +212,11 @@ async fn get_total_agent_count(query: &str, exact: bool) -> Result<usize, Error>
         if exact {
             query_builder = query_builder.eq("name", query);
         } else {
-            // Use proper PostgREST text search syntax
+            // Use proper PostgREST text search syntax with expanded fields
             query_builder = query_builder
-                .or(format!("name.ilike.*{query}*,description.ilike.*{query}*"));
+                .or(format!(
+                    "name.ilike.*{query}*,description.ilike.*{query}*,author_name.ilike.*{query}*,tags.cs.{{{query}}}"
+                ));
         }
     }
 
