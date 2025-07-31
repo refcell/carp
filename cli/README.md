@@ -51,6 +51,11 @@ carp auth status
 carp auth logout
 ```
 
+You can also provide API keys via:
+- Command line: `--api-key YOUR_KEY`
+- Environment variable: `CARP_API_KEY=YOUR_KEY`
+- Global flags work with all commands for authentication
+
 ### List All Agents
 
 ```bash
@@ -64,11 +69,14 @@ carp list
 # Basic search
 carp search "text processing"
 
-# Limit results
+# Limit results  
 carp search "claude" --limit 5
 
 # Exact match only
 carp search "my-agent" --exact
+
+# Search with verbose output
+carp search "claude" --verbose
 ```
 
 ### Pull an Agent
@@ -88,6 +96,9 @@ carp pull agent-name --output ./my-agents/
 
 # Force overwrite existing directory
 carp pull agent-name --force
+
+# Pull with verbose output
+carp pull agent-name --verbose
 ```
 
 ### Upload an Agent
@@ -98,6 +109,12 @@ carp upload
 
 # Upload from specific directory
 carp upload --directory ./path/to/agent
+
+# Upload with API key (if not configured)
+carp upload --api-key YOUR_API_KEY
+
+# Upload with verbose output
+carp upload --verbose
 ```
 
 ## Configuration
@@ -108,10 +125,18 @@ Configuration is stored in `~/.config/carp/config.toml`:
 api_key = "your-api-key"
 ```
 
-You can also set the API key via environment variable:
-```bash
-export CARP_API_KEY="your-api-key"
-```
+### Authentication Methods
+
+1. **Config file** (persistent): `~/.config/carp/config.toml`
+2. **Environment variable**: `export CARP_API_KEY="your-api-key"`
+3. **Command line flag**: `--api-key YOUR_API_KEY` (works with any command)
+
+### Global Options
+
+All commands support these global options:
+- `--verbose`: Enable detailed output
+- `--quiet`: Suppress all output except errors
+- `--api-key`: Provide API key for authentication
 
 ## Agent Manifest (Carp.toml)
 
@@ -131,31 +156,44 @@ main = "agent.py"
 ### Building
 
 ```bash
+# Build CLI only
 just build-cli
+
+# Or from CLI directory
+cd cli && cargo build --release
 ```
 
 ### Testing
 
 ```bash
+# Test CLI only  
 just test-cli
+
+# Or run specific tests
+cargo nextest run --package carp-cli
 ```
 
-### Linting
+### Linting & Formatting
 
 ```bash
+# Lint (treats warnings as errors)
 just lint-cli
-```
 
-### Formatting
-
-```bash
+# Format code
 just fmt-cli
+
+# Format with nightly rustfmt
+cargo +nightly fmt
 ```
 
 ### All Checks
 
 ```bash
-just check-cli  # Runs lint, test, and build
+# Run full test suite
+just tests
+
+# Or workspace-wide checks
+just build && just lint && just test
 ```
 
 ## Security
