@@ -1,7 +1,6 @@
 /// Tests for daily upload limit validation
 /// Verifies that users cannot upload more than 200 agents in a 24-hour period
 use chrono::{Duration, Utc};
-use serde_json::json;
 use std::env;
 use uuid::Uuid;
 
@@ -43,12 +42,12 @@ async fn test_upload_limit_validation_logic() {
     // Test the core logic without requiring a real database
     // This tests the calculation and error message logic
     
-    let user = create_test_user(Uuid::new_v4());
+    let _user = create_test_user(Uuid::new_v4());
     
     // Calculate timestamps for testing
     let now = Utc::now();
     let twenty_four_hours_ago = now - Duration::hours(24);
-    let one_hour_ago = now - Duration::hours(1);
+    let _one_hour_ago = now - Duration::hours(1);
     
     // Test timestamp format
     let timestamp_filter = twenty_four_hours_ago.to_rfc3339();
@@ -118,7 +117,7 @@ async fn test_no_database_fallback() {
     env::remove_var("SUPABASE_URL");
     env::remove_var("SUPABASE_SERVICE_ROLE_KEY");
     
-    let user = create_test_user(Uuid::new_v4());
+    let _user = create_test_user(Uuid::new_v4());
     
     // This should not fail when database is not configured
     // (We can't actually call the function here without importing it,
@@ -147,7 +146,7 @@ async fn test_upload_limit_with_database() {
     // and creating test data to verify the actual query works
     
     let config = UploadLimitTestConfig::default();
-    let user = create_test_user(config.test_user_id);
+    let _user = create_test_user(config.test_user_id);
     
     // Would need to:
     // 1. Set up test database with known data
