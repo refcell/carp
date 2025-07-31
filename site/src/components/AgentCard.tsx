@@ -14,7 +14,7 @@ interface AgentCardProps {
 export function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps) {
   return (
     <Card 
-      className="cursor-pointer hover:shadow-md transition-all duration-200 h-full flex flex-col"
+      className="cursor-pointer hover:shadow-md transition-all duration-200 h-full flex flex-col lg:min-h-0"
       onClick={onClick}
     >
       <CardHeader className={`pb-3 ${!showAuthor ? 'pr-20' : ''}`}>

@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
 All colors MUST be HSL.
 */
 
@@ -37,16 +37,16 @@ All colors MUST be HSL.
     --ring: 264 83% 57%;
 
     --radius: 0.75rem;
-    
+
     /* Claude-themed colors */
     --claude-orange: 24 100% 58%;
     --claude-purple: 264 83% 57%;
     --claude-blue: 218 81% 85%;
-    
+
     /* Gradients */
     --gradient-hero: linear-gradient(135deg, hsl(var(--claude-purple)), hsl(var(--claude-orange)));
     --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(var(--muted)));
-    
+
     /* Shadows */
     --shadow-elegant: 0 10px 30px -10px hsl(var(--claude-purple) / 0.2);
     --shadow-card: 0 4px 20px -4px hsl(var(--foreground) / 0.1);
@@ -105,6 +105,12 @@ All colors MUST be HSL.
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
 }
 
 @layer base {

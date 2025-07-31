@@ -21,13 +21,19 @@ export interface Agent {
 }
 
 export function useAgents() {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [searchResults, setSearchResults] = useState<Agent[]>([]);
+  const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
   const fetchAgents = useCallback(async (search?: string, limit?: number, offset?: number) => {
-    setLoading(true);
+    if (search && search.trim()) {
+      setSearchLoading(true);
+    } else {
+      setLoading(true);
+    }
     try {
       let query = supabase
         .from('agents')
@@ -74,16 +80,33 @@ export function useAgents() {
           })
         );
         
-        setAgents(agentsWithProfiles as Agent[]);
+        const typedAgents = agentsWithProfiles as Agent[];
+        if (search && search.trim()) {
+          setSearchResults(typedAgents);
+        } else {
+          setAllAgents(typedAgents);
+        }
       } else if (error) {
         console.error('Error fetching agents:', error);
-        setAgents([]);
+        if (search && search.trim()) {
+          setSearchResults([]);
+        } else {
+          setAllAgents([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching agents:', error);
-      setAgents([]);
+      if (search && search.trim()) {
+        setSearchResults([]);
+      } else {
+        setAllAgents([]);
+      }
     } finally {
-      setLoading(false);
+      if (search && search.trim()) {
+        setSearchLoading(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -297,9 +320,15 @@ export function useAgents() {
 
   // Debounced search effect
   useEffect(() => {
+    if (!searchQuery || !searchQuery.trim()) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
     const timeoutId = setTimeout(() => {
       fetchAgents(searchQuery);
-    }, searchQuery ? 300 : 0); // 300ms debounce for search, immediate for empty
+    }, 200); // Reduced debounce for more responsiveness
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery, fetchAgents]);
@@ -323,7 +352,7 @@ export function useAgents() {
         () => {
           // Use a slight delay to ensure database consistency
           setTimeout(() => {
-            fetchAgents(searchQuery);
+            fetchAgents(); // Only refresh all agents, not search
           }, 100);
         }
       )
@@ -332,19 +361,23 @@ export function useAgents() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchAgents, searchQuery]); // Include searchQuery to handle changes
+  }, [fetchAgents]); // Remove searchQuery dependency to avoid conflicts
 
-  const trendingAgents = agents
+  // Dashboard sections always use allAgents (never affected by search)
+  const trendingAgents = allAgents
     .sort((a, b) => b.view_count - a.view_count)
     .slice(0, 5);
 
-  const latestAgents = agents
+  const latestAgents = allAgents
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 10);
 
-  const topAgents = agents
+  const topAgents = allAgents
     .sort((a, b) => b.view_count - a.view_count)
     .slice(0, 10);
+
+  // Search results are separate
+  const agents = searchQuery ? searchResults : allAgents;
 
   const refreshAgents = useCallback(() => {
     fetchAgents(searchQuery);
@@ -353,6 +386,7 @@ export function useAgents() {
   return {
     agents,
     loading,
+    searchLoading,
     searchQuery,
     setSearchQuery,
     trendingAgents,
