@@ -152,26 +152,6 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         }
     }
 
-    // Check daily upload limit
-    match check_daily_upload_limit(&authenticated_user).await {
-        Ok(_) => {}
-        Err(error_msg) => {
-            let error = ApiError {
-                error: "daily_limit_exceeded".to_string(),
-                message: error_msg,
-                details: Some(json!({
-                    "user_id": authenticated_user.user_id,
-                    "limit": 200,
-                    "period": "24 hours"
-                })),
-            };
-            return Ok(Response::builder()
-                .status(429)  // Too Many Requests
-                .header("content-type", "application/json")
-                .body(serde_json::to_string(&error)?.into())?);
-        }
-    }
-
     // Extract the original API key from the request for database function
     let auth_header = req.headers()
         .get("authorization")
@@ -405,71 +385,6 @@ fn validate_frontmatter_consistency(
     } else {
         Err(errors)
     }
-}
-
-/// Check if user has exceeded the daily upload limit (200 agents per day)
-async fn check_daily_upload_limit(user: &AuthenticatedUser) -> Result<(), String> {
-    // Get database connection
-    let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
-    let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
-
-    // If no database configured, skip the check (for testing/development)
-    if supabase_url.is_empty() || supabase_key.is_empty() {
-        eprintln!("DEBUG: Skipping daily upload limit check (no database configured)");
-        return Ok(());
-    }
-
-    // Calculate timestamp for 24 hours ago
-    let twenty_four_hours_ago = chrono::Utc::now() - chrono::Duration::hours(24);
-    let timestamp_filter = twenty_four_hours_ago.to_rfc3339();
-
-    // Create HTTP client
-    let client = reqwest::Client::new();
-
-    // Query agents table for uploads by this user in the past 24 hours
-    let query_url = format!(
-        "{}/rest/v1/agents?user_id=eq.{}&created_at=gte.{}&select=id",
-        supabase_url, user.user_id, timestamp_filter
-    );
-
-    eprintln!("DEBUG: Checking daily upload limit for user {}, query: {}", user.user_id, query_url);
-
-    let response = client
-        .get(&query_url)
-        .header("apikey", &supabase_key)
-        .header("Authorization", format!("Bearer {}", supabase_key))
-        .header("Content-Type", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to query user uploads: {}", e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let error_text = response.text().await.unwrap_or_default();
-        eprintln!("DEBUG: Upload count query failed: {}", error_text);
-        // Don't fail the upload if we can't check the limit - fail open for availability
-        return Ok(());
-    }
-
-    let response_body = response.text().await
-        .map_err(|e| format!("Failed to read upload count response: {}", e))?;
-
-    // Parse response as array of agent records
-    let agents: Vec<serde_json::Value> = serde_json::from_str(&response_body)
-        .map_err(|e| format!("Failed to parse upload count response: {}", e))?;
-
-    let upload_count = agents.len();
-    eprintln!("DEBUG: User {} has uploaded {} agents in the past 24 hours", user.user_id, upload_count);
-
-    // Check if user would exceed the limit with this upload (199 is the limit since this would be the 200th)
-    if upload_count >= 199 {
-        return Err(format!(
-            "Daily upload limit exceeded. You have uploaded {} agents in the past 24 hours. Maximum allowed is 200 agents per day.",
-            upload_count + 1  // +1 to include this attempted upload
-        ));
-    }
-
-    Ok(())
 }
 
 async fn upload_agent(
