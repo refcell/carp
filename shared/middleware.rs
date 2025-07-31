@@ -1,5 +1,5 @@
 use crate::auth::{
-    authenticate_api_key, authenticate_jwt, extract_bearer_token, guess_token_type, sync_jwt_user,
+    authenticate_api_key, authenticate_jwt, extract_bearer_token, guess_token_type, sync_jwt_user, sync_api_key_user,
     ApiError, AuthConfig, AuthenticatedUser, TokenType,
 };
 use serde_json::json;
@@ -77,13 +77,23 @@ pub async fn authenticate_request(
         AuthStrategy::Flexible => authenticate_flexible(&token, &config).await?,
     };
 
-    // For JWT authentication, ensure user is synced in database
-    if matches!(user.auth_method, crate::auth::AuthMethod::JwtToken { .. }) {
-        if let Err(sync_error) = sync_jwt_user(&user, &config).await {
-            if config.debug_mode {
-                eprintln!("DEBUG: User sync failed (non-fatal): {sync_error:?}");
+    // Sync user to database based on authentication method
+    match &user.auth_method {
+        crate::auth::AuthMethod::JwtToken { .. } => {
+            if let Err(sync_error) = sync_jwt_user(&user, &config).await {
+                if config.debug_mode {
+                    eprintln!("DEBUG: JWT user sync failed (non-fatal): {sync_error:?}");
+                }
+                // Don't fail authentication for sync errors, just log them
             }
-            // Don't fail authentication for sync errors, just log them
+        }
+        crate::auth::AuthMethod::ApiKey { .. } => {
+            if let Err(sync_error) = sync_api_key_user(&user, &config).await {
+                if config.debug_mode {
+                    eprintln!("DEBUG: API key user sync failed (non-fatal): {sync_error:?}");
+                }
+                // Don't fail authentication for sync errors, just log them
+            }
         }
     }
 

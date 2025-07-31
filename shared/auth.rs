@@ -361,7 +361,7 @@ pub async fn authenticate_api_key(
 }
 
 /// Ensure user exists in database (for JWT authentication)
-/// This synchronizes GitHub OAuth users with our user table
+/// This synchronizes GitHub OAuth users with our profiles table
 pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Result<(), ApiError> {
     if config.is_development() {
         return Ok(()); // Skip in development
@@ -369,24 +369,24 @@ pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Res
 
     let client = reqwest::Client::new();
 
-    // Check if user exists, create if not
-    let user_data = json!({
-        "id": user.user_id,
-        "email": user.metadata.email,
+    // Use the fixed sync function to properly sync to profiles table
+    let sync_params = json!({
+        "user_uuid": user.user_id,
+        "user_email": user.metadata.email,
         "github_username": user.metadata.github_username,
-        "created_at": user.metadata.created_at.unwrap_or_else(Utc::now)
+        "display_name": user.metadata.github_username, // Use github_username as display_name if available
+        "avatar_url": null // Would need to be passed from JWT metadata if available
     });
 
-    let _response = client
-        .post(format!("{}/rest/v1/users", config.supabase_url))
+    let response = client
+        .post(format!("{}/rest/v1/rpc/sync_jwt_user_fixed", config.supabase_url))
         .header("apikey", &config.supabase_service_role_key)
         .header(
             "Authorization",
             format!("Bearer {}", config.supabase_service_role_key),
         )
         .header("Content-Type", "application/json")
-        .header("Prefer", "resolution=merge-duplicates")
-        .json(&user_data)
+        .json(&sync_params)
         .send()
         .await
         .map_err(|e| ApiError {
@@ -394,6 +394,60 @@ pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Res
             message: format!("Failed to sync user: {e}"),
             details: None,
         })?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(ApiError {
+            error: "sync_failed".to_string(),
+            message: format!("User sync failed: {error_text}"),
+            details: None,
+        });
+    }
+
+    Ok(())
+}
+
+/// Ensure API key user exists in database
+/// This handles users authenticated via API keys who may not have proper auth.users entries
+pub async fn sync_api_key_user(user: &AuthenticatedUser, config: &AuthConfig) -> Result<(), ApiError> {
+    if config.is_development() {
+        return Ok(()); // Skip in development
+    }
+
+    let client = reqwest::Client::new();
+
+    // Use the API key sync function to ensure user profile exists
+    let sync_params = json!({
+        "user_uuid": user.user_id,
+        "user_email": user.metadata.email,
+        "github_username": user.metadata.github_username
+    });
+
+    let response = client
+        .post(format!("{}/rest/v1/rpc/sync_api_key_user", config.supabase_url))
+        .header("apikey", &config.supabase_service_role_key)
+        .header(
+            "Authorization",
+            format!("Bearer {}", config.supabase_service_role_key),
+        )
+        .header("Content-Type", "application/json")
+        .json(&sync_params)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            error: "database_error".to_string(),
+            message: format!("Failed to sync API key user: {e}"),
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(ApiError {
+            error: "api_key_sync_failed".to_string(),
+            message: format!("API key user sync failed: {error_text}"),
+            details: None,
+        });
+    }
 
     Ok(())
 }
