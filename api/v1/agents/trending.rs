@@ -75,6 +75,14 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     let client = postgrest::Postgrest::new(format!("{supabase_url}/rest/v1"))
         .insert_header("apikey", &supabase_key);
 
+    // Try to ensure the materialized view is populated if we have service role key
+    if env::var("SUPABASE_SERVICE_ROLE_KEY").is_ok() {
+        let _ = client
+            .rpc("ensure_trending_view_populated", "{}")
+            .execute()
+            .await; // Ignore errors, will fall back to regular query if needed
+    }
+
     // Try materialized view first for optimal performance
     let response = client
         .from("trending_agents_mv")
@@ -85,29 +93,71 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
         .await;
 
     let response = match response {
-        Ok(resp) if resp.status().is_success() => resp,
-        _ => {
-            // Fallback to regular agents table if materialized view fails
+        Ok(resp) if resp.status().is_success() => {
+            // Check if the response has content
+            let body_check = resp.text().await.unwrap_or_default();
+            if body_check.is_empty() || body_check == "[]" {
+                // Materialized view is empty, fall back to regular query
+                None
+            } else {
+                // Return the successful response by re-executing the query
+                // since we consumed the body above
+                Some(
+                    client
+                        .from("trending_agents_mv")
+                        .select("name,current_version,description,author_name,created_at,updated_at,download_count,tags")
+                        .order("trending_score.desc")
+                        .limit(limit)
+                        .execute()
+                        .await
+                        .map_err(|e| Error::from(format!("Materialized view query failed: {e}")))?
+                )
+            }
+        },
+        Ok(_) | Err(_) => None, // Failed or unsuccessful status, use fallback
+    };
+
+    let response = match response {
+        Some(resp) => resp,
+        None => {
+            // Fallback to regular agents table if materialized view fails or is empty
+            eprintln!("Falling back to regular agents table for trending query");
             client
                 .from("agents")
                 .select("name,current_version,description,author_name,created_at,updated_at,download_count,tags")
                 .eq("is_public", "true")
                 .gte("download_count", "1")
+                .not("current_version", "is", "null") // Ensure current_version is not null
                 .order("download_count.desc,updated_at.desc")
                 .limit(limit)
                 .execute()
                 .await
-                .map_err(|e| Error::from(format!("Database query failed: {e}")))?
+                .map_err(|e| Error::from(format!("Fallback database query failed: {e}")))?
         }
     };
+
+    if !response.status().is_success() {
+        return Err(Error::from(format!(
+            "Database query failed with status: {}", 
+            response.status()
+        )));
+    }
 
     let body = response
         .text()
         .await
         .map_err(|e| Error::from(format!("Failed to read response: {e}")))?;
 
+    // Return empty list if no data
+    if body.is_empty() || body == "[]" {
+        return Ok(Vec::new());
+    }
+
     let agents: Vec<Agent> = serde_json::from_str(&body)
-        .map_err(|e| Error::from(format!("Failed to parse agents: {e}")))?;
+        .map_err(|e| {
+            eprintln!("Failed to parse trending agents response: {}", body);
+            Error::from(format!("Failed to parse agents: {e}"))
+        })?;
 
     Ok(agents)
 }

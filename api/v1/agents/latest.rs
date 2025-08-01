@@ -76,23 +76,40 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
         .insert_header("apikey", &supabase_key);
 
     // Optimized query: Only fetch what we need, use existing optimal index
+    // Handle potential missing fields gracefully
     let response = client
         .from("agents")
         .select("name,current_version,description,author_name,created_at,updated_at,download_count,tags")
         .eq("is_public", "true")
+        .not("current_version", "is", "null") // Ensure current_version is not null
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
         .execute()
         .await
         .map_err(|e| Error::from(format!("Database query failed: {e}")))?;
 
+    if !response.status().is_success() {
+        return Err(Error::from(format!(
+            "Database query failed with status: {}", 
+            response.status()
+        )));
+    }
+
     let body = response
         .text()
         .await
         .map_err(|e| Error::from(format!("Failed to read response: {e}")))?;
 
+    // Return empty list if no data
+    if body.is_empty() || body == "[]" {
+        return Ok(Vec::new());
+    }
+
     let agents: Vec<Agent> = serde_json::from_str(&body)
-        .map_err(|e| Error::from(format!("Failed to parse agents: {e}")))?;
+        .map_err(|e| {
+            eprintln!("Failed to parse agents response: {}", body);
+            Error::from(format!("Failed to parse agents: {e}"))
+        })?;
 
     Ok(agents)
 }
