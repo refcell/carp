@@ -1,5 +1,5 @@
 /// Tests for the optimized latest and trending API endpoints
-/// 
+///
 /// These tests verify:
 /// - Proper error handling and graceful degradation
 /// - Database field validation and fallback behavior
@@ -76,7 +76,7 @@ mod latest_endpoint_tests {
                 "tags": ["test", "agent"]
             },
             {
-                "name": "test-agent-2", 
+                "name": "test-agent-2",
                 "current_version": "2.0.0",
                 "description": "Test agent 2",
                 "author_name": null,
@@ -203,7 +203,11 @@ mod latest_endpoint_tests {
             let parsed_limit = input_limit
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(10);
-            let limit = if parsed_limit == 0 { 10 } else { parsed_limit.min(50) };
+            let limit = if parsed_limit == 0 {
+                10
+            } else {
+                parsed_limit.min(50)
+            };
 
             assert_eq!(
                 limit, expected_limit,
@@ -370,7 +374,10 @@ mod trending_endpoint_tests {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!("{}/rest/v1/rpc/ensure_trending_view_populated", mock_server.uri()))
+            .post(&format!(
+                "{}/rest/v1/rpc/ensure_trending_view_populated",
+                mock_server.uri()
+            ))
             .header("apikey", "test_service_key")
             .header("Content-Type", "application/json")
             .json(&expected_function_call)
@@ -477,7 +484,7 @@ mod error_handling_tests {
         for (status_code, error_message) in error_scenarios {
             // Create a fresh mock server for each test case
             let mock_server = MockServer::start().await;
-            
+
             Mock::given(method("GET"))
                 .and(path("/rest/v1/agents"))
                 .respond_with(ResponseTemplate::new(status_code).set_body_json(json!({
@@ -496,8 +503,17 @@ mod error_handling_tests {
                 .await
                 .unwrap();
 
-            assert!(!response.status().is_success(), "Status should indicate failure for {}", status_code);
-            assert_eq!(response.status(), status_code, "Status code should match for {}", status_code);
+            assert!(
+                !response.status().is_success(),
+                "Status should indicate failure for {}",
+                status_code
+            );
+            assert_eq!(
+                response.status(),
+                status_code,
+                "Status code should match for {}",
+                status_code
+            );
         }
     }
 
@@ -559,6 +575,9 @@ mod error_handling_tests {
 
         // Attempt to parse should fail due to missing required fields
         let parse_result = response.json::<Vec<Agent>>().await;
-        assert!(parse_result.is_err(), "Should fail to parse agent with missing required fields");
+        assert!(
+            parse_result.is_err(),
+            "Should fail to parse agent with missing required fields"
+        );
     }
 }

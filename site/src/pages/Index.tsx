@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAgents } from '@/hooks/useAgents';
+import { useLatestAgents, useTrendingAgents, Agent } from '@/hooks/useOptimizedAgents';
 import { useStats } from '@/hooks/useStats';
 import { SearchBar } from '@/components/SearchBar';
 import { AgentCard } from '@/components/AgentCard';
@@ -7,20 +8,29 @@ import { TrendingModal } from '@/components/TrendingModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TrendingUp, Clock, Star, Sparkles, Search, BarChart3, Users, Trophy } from 'lucide-react';
-import { Agent } from '@/hooks/useAgents';
 
 const Index = () => {
+  // Use the original useAgents hook for search functionality
   const {
-    agents,
-    loading,
-    searchLoading,
+    agents: searchAgents,
+    loading: searchLoading,
     searchQuery,
     setSearchQuery,
-    trendingAgents,
-    latestAgents,
-    topAgents,
     incrementViewCount
   } = useAgents();
+
+  // Use optimized hooks for latest and trending agents
+  const { data: latestAgents = [], isLoading: latestLoading, error: latestError } = useLatestAgents(10);
+  const { data: trendingAgents = [], isLoading: trendingLoading, error: trendingError } = useTrendingAgents(5);
+
+  // Derive loading states
+  const loading = latestLoading || trendingLoading;
+  
+  // For search results, use the search agents
+  const agents = searchQuery ? searchAgents : [];
+  
+  // Create topAgents from trendingAgents for compatibility
+  const topAgents = useMemo(() => trendingAgents.slice(0, 10), [trendingAgents]);
 
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showTrendingModal, setShowTrendingModal] = useState(false);
@@ -42,6 +52,14 @@ const Index = () => {
 
   // Memoize the featured agent to prevent unnecessary re-renders
   const featuredAgent = useMemo(() => trendingAgents[0], [trendingAgents]);
+
+  // Log any errors for debugging
+  if (latestError) {
+    console.error('[Index] Latest agents error:', latestError);
+  }
+  if (trendingError) {
+    console.error('[Index] Trending agents error:', trendingError);
+  }
 
   return (
           <div className="grid px-8 flex-grow mx-auto mb-8 mt-12 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-200px)]">

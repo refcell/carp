@@ -1,0 +1,131 @@
+import { useQuery } from '@tanstack/react-query';
+import { getApiBaseUrl, API_ENDPOINTS } from '@/lib/api-config';
+
+// Types for the optimized API response format
+export interface OptimizedAgent {
+  name: string;
+  current_version: string;
+  description: string;
+  author_name: string;
+  created_at: string;
+  updated_at: string;
+  download_count: number;
+  tags: string[] | null;
+}
+
+export interface OptimizedAgentsResponse {
+  agents: OptimizedAgent[];
+  cached_at: string;
+}
+
+// Convert OptimizedAgent to the existing Agent interface for compatibility
+export interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  definition: Record<string, unknown>;
+  tags: string[] | null;
+  view_count: number;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  is_public?: boolean;
+  profiles?: {
+    github_username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
+// Convert optimized agent to legacy agent format for compatibility
+const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => ({
+  id: `${optimizedAgent.name}-${optimizedAgent.current_version}`, // Generate ID from name+version
+  name: optimizedAgent.name,
+  description: optimizedAgent.description,
+  definition: { version: optimizedAgent.current_version }, // Store version in definition
+  tags: optimizedAgent.tags,
+  view_count: optimizedAgent.download_count, // Map download_count to view_count
+  created_at: optimizedAgent.created_at,
+  updated_at: optimizedAgent.updated_at,
+  user_id: '', // Not available in optimized response
+  is_public: true, // Assume public since it's in the public API
+  profiles: {
+    github_username: null,
+    display_name: optimizedAgent.author_name,
+    avatar_url: null,
+  },
+});
+
+/**
+ * Hook to fetch latest agents using the optimized API endpoint
+ * Uses React Query for caching and error handling
+ */
+export function useLatestAgents(limit: number = 10) {
+  return useQuery({
+    queryKey: ['agents', 'latest', limit],
+    queryFn: async (): Promise<Agent[]> => {
+      const baseUrl = getApiBaseUrl();
+      const url = `${baseUrl}${API_ENDPOINTS.LATEST_AGENTS}?limit=${Math.min(limit, 50)}`;
+      
+      console.log('[useLatestAgents] Fetching from:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('[useLatestAgents] API error:', response.status, response.statusText);
+        throw new Error('Failed to fetch latest agents: ' + response.status + ' ' + response.statusText);
+      }
+
+      const data: OptimizedAgentsResponse = await response.json();
+      console.log('[useLatestAgents] Received data:', data);
+      
+      // Convert optimized agents to legacy format for compatibility
+      return data.agents.map(convertOptimizedAgent);
+    },
+    staleTime: 1 * 60 * 1000, // 1 minute (matches API cache)
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Hook to fetch trending agents using the optimized API endpoint  
+ * Uses React Query for caching and error handling
+ */
+export function useTrendingAgents(limit: number = 10) {
+  return useQuery({
+    queryKey: ['agents', 'trending', limit],
+    queryFn: async (): Promise<Agent[]> => {
+      const baseUrl = getApiBaseUrl();
+      const url = `${baseUrl}${API_ENDPOINTS.TRENDING_AGENTS}?limit=${Math.min(limit, 50)}`;
+      
+      console.log('[useTrendingAgents] Fetching from:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        console.error('[useTrendingAgents] API error:', response.status, response.statusText);
+        throw new Error('Failed to fetch trending agents: ' + response.status + ' ' + response.statusText);
+      }
+
+      const data: OptimizedAgentsResponse = await response.json();
+      console.log('[useTrendingAgents] Received data:', data);
+      
+      // Convert optimized agents to legacy format for compatibility
+      return data.agents.map(convertOptimizedAgent);
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes (matches API cache)
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+}

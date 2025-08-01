@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Agent } from '@/hooks/useAgents';
+import { Agent } from '@/hooks/useOptimizedAgents';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

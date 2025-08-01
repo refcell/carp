@@ -33,9 +33,11 @@ async fn main() -> Result<(), Error> {
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     // Parse limit parameter (default 10, max 50)
     let query = req.uri().query().unwrap_or("");
-    let params: std::collections::HashMap<String, String> = 
-        url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
-    
+    let params: std::collections::HashMap<String, String> =
+        url::form_urlencoded::parse(query.as_bytes())
+            .into_owned()
+            .collect();
+
     let limit = params
         .get("limit")
         .and_then(|s| s.parse::<usize>().ok())
@@ -113,7 +115,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
                         .map_err(|e| Error::from(format!("Materialized view query failed: {e}")))?
                 )
             }
-        },
+        }
         Ok(_) | Err(_) => None, // Failed or unsuccessful status, use fallback
     };
 
@@ -138,7 +140,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
 
     if !response.status().is_success() {
         return Err(Error::from(format!(
-            "Database query failed with status: {}", 
+            "Database query failed with status: {}",
             response.status()
         )));
     }
@@ -153,11 +155,10 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
         return Ok(Vec::new());
     }
 
-    let agents: Vec<Agent> = serde_json::from_str(&body)
-        .map_err(|e| {
-            eprintln!("Failed to parse trending agents response: {}", body);
-            Error::from(format!("Failed to parse agents: {e}"))
-        })?;
+    let agents: Vec<Agent> = serde_json::from_str(&body).map_err(|e| {
+        eprintln!("Failed to parse trending agents response: {}", body);
+        Error::from(format!("Failed to parse agents: {e}"))
+    })?;
 
     Ok(agents)
 }

@@ -7,8 +7,8 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 
 // Use shared authentication module
 use shared::{
-    jwt_middleware, require_scope, ApiError, AuthMethod, AuthenticatedUser,
-    extract_bearer_token, guess_token_type, authenticate_jwt, authenticate_api_key, AuthConfig, TokenType,
+    authenticate_api_key, authenticate_jwt, extract_bearer_token, guess_token_type, jwt_middleware,
+    require_scope, ApiError, AuthConfig, AuthMethod, AuthenticatedUser, TokenType,
 };
 
 /// API key information (without the actual key)
@@ -52,11 +52,13 @@ pub struct UpdateApiKeyRequest {
 /// This allows both web users (JWT) and CLI users (API key) to access the same endpoints
 async fn try_flexible_auth(req: &Request) -> Result<AuthenticatedUser, Response<Body>> {
     let config = AuthConfig::from_env();
-    
+
     let token = extract_bearer_token(req).ok_or_else(|| {
         let error = ApiError {
             error: "missing_authentication".to_string(),
-            message: "Authentication required. Provide either a JWT token (from web login) or API key.".to_string(),
+            message:
+                "Authentication required. Provide either a JWT token (from web login) or API key."
+                    .to_string(),
             details: Some(serde_json::json!({
                 "accepted_methods": ["jwt_token", "api_key"],
                 "header_formats": [
@@ -76,24 +78,20 @@ async fn try_flexible_auth(req: &Request) -> Result<AuthenticatedUser, Response<
 
     // Try to determine token type and authenticate accordingly
     match guess_token_type(&token) {
-        TokenType::ApiKey => {
-            authenticate_api_key(&token, &config).await.map_err(|e| {
-                Response::builder()
-                    .status(401)
-                    .header("content-type", "application/json")
-                    .body(serde_json::to_string(&e).unwrap_or_default().into())
-                    .unwrap()
-            })
-        }
-        TokenType::Jwt => {
-            authenticate_jwt(&token, &config).await.map_err(|e| {
-                Response::builder()
-                    .status(401)
-                    .header("content-type", "application/json")  
-                    .body(serde_json::to_string(&e).unwrap_or_default().into())
-                    .unwrap()
-            })
-        }
+        TokenType::ApiKey => authenticate_api_key(&token, &config).await.map_err(|e| {
+            Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(serde_json::to_string(&e).unwrap_or_default().into())
+                .unwrap()
+        }),
+        TokenType::Jwt => authenticate_jwt(&token, &config).await.map_err(|e| {
+            Response::builder()
+                .status(401)
+                .header("content-type", "application/json")
+                .body(serde_json::to_string(&e).unwrap_or_default().into())
+                .unwrap()
+        }),
     }
 }
 
@@ -154,7 +152,10 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 }
 
-async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) -> Result<Response<Body>, Error> {
+async fn list_api_keys(
+    req: &Request,
+    authenticated_user: &AuthenticatedUser,
+) -> Result<Response<Body>, Error> {
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
 
@@ -181,7 +182,7 @@ async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) ->
 
     // Extract the original token to determine authentication method
     let user_token = extract_bearer_token(req);
-    
+
     // For JWT authentication, use the user's token to respect RLS policies
     // For API key authentication, use service role with application-level filtering
     let (auth_header, needs_user_filter) = match &authenticated_user.auth_method {
@@ -207,7 +208,8 @@ async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) ->
 
     // Only add user_id filter when using service role (RLS won't handle it)
     if needs_user_filter {
-        query_builder = query_builder.query(&[("user_id", format!("eq.{}", authenticated_user.user_id))]);
+        query_builder =
+            query_builder.query(&[("user_id", format!("eq.{}", authenticated_user.user_id))]);
     }
 
     let response = query_builder.send().await?;
@@ -229,11 +231,11 @@ async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) ->
     }
 
     let body = response.text().await?;
-    
+
     // Handle the case where Supabase returns a different field name
     let api_keys: Vec<serde_json::Value> = serde_json::from_str(&body)
         .map_err(|_| Error::from("Failed to parse API keys response"))?;
-    
+
     // Convert to our expected format, handling field name differences
     let formatted_keys: Vec<ApiKeyInfo> = api_keys
         .into_iter()
@@ -246,7 +248,7 @@ async fn list_api_keys(req: &Request, authenticated_user: &AuthenticatedUser) ->
                 // If neither prefix nor key_prefix exists, skip this record
                 return None;
             }
-            
+
             serde_json::from_value(key).ok()
         })
         .collect();
@@ -262,9 +264,8 @@ async fn create_api_key(
     authenticated_user: &AuthenticatedUser,
 ) -> Result<Response<Body>, Error> {
     // Extract the user's JWT token for database operations
-    let user_jwt = extract_bearer_token(req).ok_or_else(|| {
-        Error::from("Missing authorization token")
-    })?;
+    let user_jwt =
+        extract_bearer_token(req).ok_or_else(|| Error::from("Missing authorization token"))?;
     // Parse request body
     let body_bytes = req.body();
     let body_str = std::str::from_utf8(body_bytes)

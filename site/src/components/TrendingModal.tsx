@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Agent } from '@/hooks/useAgents';
+import { Agent } from '@/hooks/useOptimizedAgents';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

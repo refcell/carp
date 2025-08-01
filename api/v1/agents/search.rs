@@ -46,7 +46,9 @@ impl From<DbAgent> for Agent {
             name: db_agent.name,
             version: db_agent.version,
             description: db_agent.description,
-            author: db_agent.author_name.unwrap_or_else(|| "Unknown".to_string()),
+            author: db_agent
+                .author_name
+                .unwrap_or_else(|| "Unknown".to_string()),
             created_at: db_agent.created_at,
             updated_at: db_agent.updated_at,
             download_count: db_agent.download_count,
@@ -253,4 +255,3 @@ async fn get_total_agent_count(query: &str, exact: bool) -> Result<usize, Error>
     // Fallback to 0 if count parsing fails
     Ok(0)
 }
-
