@@ -69,23 +69,32 @@ export function useLatestAgents(limit: number = 10) {
       
       console.log('[useLatestAgents] Fetching from:', url);
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!response.ok) {
-        console.error('[useLatestAgents] API error:', response.status, response.statusText);
-        throw new Error('Failed to fetch latest agents: ' + response.status + ' ' + response.statusText);
+        if (!response.ok) {
+          console.error('[useLatestAgents] API error:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('[useLatestAgents] Error details:', errorText);
+          // Return empty array on error instead of throwing
+          return [];
+        }
+
+        const data: OptimizedAgentsResponse = await response.json();
+        console.log('[useLatestAgents] Received data:', data);
+        
+        // Convert optimized agents to legacy format for compatibility
+        return data.agents?.map(convertOptimizedAgent) || [];
+      } catch (error) {
+        console.error('[useLatestAgents] Fetch error:', error);
+        // Return empty array on error
+        return [];
       }
-
-      const data: OptimizedAgentsResponse = await response.json();
-      console.log('[useLatestAgents] Received data:', data);
-      
-      // Convert optimized agents to legacy format for compatibility
-      return data.agents.map(convertOptimizedAgent);
     },
     staleTime: 1 * 60 * 1000, // 1 minute (matches API cache)
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -106,23 +115,32 @@ export function useTrendingAgents(limit: number = 10) {
       
       console.log('[useTrendingAgents] Fetching from:', url);
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!response.ok) {
-        console.error('[useTrendingAgents] API error:', response.status, response.statusText);
-        throw new Error('Failed to fetch trending agents: ' + response.status + ' ' + response.statusText);
+        if (!response.ok) {
+          console.error('[useTrendingAgents] API error:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('[useTrendingAgents] Error details:', errorText);
+          // Return empty array on error instead of throwing
+          return [];
+        }
+
+        const data: OptimizedAgentsResponse = await response.json();
+        console.log('[useTrendingAgents] Received data:', data);
+        
+        // Convert optimized agents to legacy format for compatibility
+        return data.agents?.map(convertOptimizedAgent) || [];
+      } catch (error) {
+        console.error('[useTrendingAgents] Fetch error:', error);
+        // Return empty array on error
+        return [];
       }
-
-      const data: OptimizedAgentsResponse = await response.json();
-      console.log('[useTrendingAgents] Received data:', data);
-      
-      // Convert optimized agents to legacy format for compatibility
-      return data.agents.map(convertOptimizedAgent);
     },
     staleTime: 5 * 60 * 1000, // 5 minutes (matches API cache)
     gcTime: 10 * 60 * 1000, // 10 minutes

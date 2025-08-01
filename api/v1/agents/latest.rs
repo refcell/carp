@@ -7,10 +7,8 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub name: String,
-    #[serde(rename = "current_version")]
-    pub version: String,
+    pub current_version: String,
     pub description: String,
-    #[serde(rename = "author_name")]
     pub author_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -31,6 +29,16 @@ async fn main() -> Result<(), Error> {
 }
 
 pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
+    // Handle CORS preflight
+    if req.method() == "OPTIONS" {
+        return Ok(Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            .header("Access-Control-Allow-Headers", "Content-Type")
+            .body(Body::Empty)?)
+    }
+
     // Parse limit parameter (default 10, max 50)
     let query = req.uri().query().unwrap_or("");
     let params: std::collections::HashMap<String, String> =
@@ -56,6 +64,9 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
         .status(200)
         .header("content-type", "application/json")
         .header("Cache-Control", "public, max-age=60") // Cache for 1 minute
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        .header("Access-Control-Allow-Headers", "Content-Type")
         .body(serde_json::to_string(&response_body)?.into())?;
 
     Ok(response)
