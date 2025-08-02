@@ -15,13 +15,13 @@ interface AgentCardProps {
 const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }: AgentCardProps) {
   return (
     <Card 
-      className="cursor-pointer hover:shadow-md transition-all duration-200 h-full flex flex-col lg:min-h-0"
+      className="cursor-pointer hover:shadow-md transition-all duration-200 flex flex-col"
       onClick={onClick}
     >
       <CardHeader className={`pb-3 ${!showAuthor ? 'pr-20' : ''}`}>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg font-semibold line-clamp-1 mb-2">
+            <CardTitle className="text-lg font-semibold truncate mb-2 flex items-center">
               {agent.name}
               {agent.definition?.version && (
                 <span className="text-sm font-normal text-muted-foreground ml-2">v{agent.definition.version}</span>
@@ -41,14 +41,14 @@ const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }:
                 {(agent.profiles.display_name || agent.profiles.github_username || 'U')[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground truncate">
               {agent.profiles.display_name || agent.profiles.github_username}
             </span>
           </div>
         )}
       </CardHeader>
       
-      <CardContent className="pt-0 flex-1 flex flex-col justify-between px-6 pb-4">
+      <CardContent className="pt-0 flex flex-col px-6 pb-4">
         <div>
           {agent.tags && agent.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-4">
@@ -66,7 +66,7 @@ const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }:
           )}
         </div>
         
-        <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
+        <div className="flex items-center justify-between text-sm text-muted-foreground mt-auto pt-4">
           <div className="flex items-center space-x-1">
             <Eye className="w-3 h-3" />
             <span>{agent.view_count}</span>

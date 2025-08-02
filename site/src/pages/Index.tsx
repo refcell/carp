@@ -238,7 +238,7 @@ const Index = () => {
                     <CardHeader className="flex-shrink-0">
                       <CardTitle className="flex items-center space-x-2">
                         <Star className="w-5 h-5" />
-                        <span>Top Rated</span>
+                        <span>Trending</span>
                       </CardTitle>
                       <CardDescription>Most viewed agents</CardDescription>
                     </CardHeader>
@@ -250,7 +250,7 @@ const Index = () => {
                           ))}
                         </div>
                       ) : topAgents.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-full lg:overflow-y-auto pr-2 lg:min-h-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:overflow-y-auto pr-2">
                           {topAgents.map((agent) => (
                             <AgentCard
                               key={agent.id}
@@ -286,7 +286,7 @@ const Index = () => {
                       ))}
                     </div>
                   ) : latestAgents.length > 0 ? (
-                    <div className="flex flex-col gap-6 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
+                    <div className="flex flex-col gap-6 overflow-y-auto max-h-96 lg:max-h-none">
                       {latestAgents.slice(0, 6).map((agent) => (
                         <AgentCard
                           key={agent.id}
