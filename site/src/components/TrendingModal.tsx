@@ -19,18 +19,30 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
   const { toast } = useToast();
   const hasIncrementedRef = useRef(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [localViewCount, setLocalViewCount] = useState<number | null>(null);
 
   // Track when modal opens and increment view count
   useEffect(() => {
-    if (open && agent && onViewIncrement && !hasIncrementedRef.current) {
-      onViewIncrement(agent.id);
-      hasIncrementedRef.current = true;
+    if (open && agent) {
+      // Set initial view count
+      if (localViewCount === null) {
+        setLocalViewCount(agent.view_count);
+      }
+      
+      // Increment view count if not already done
+      if (onViewIncrement && !hasIncrementedRef.current) {
+        onViewIncrement(agent.id);
+        hasIncrementedRef.current = true;
+        // Optimistically increment local view count
+        setLocalViewCount(prev => (prev ?? agent.view_count) + 1);
+      }
     }
     
     // Reset when modal closes
     if (!open) {
       hasIncrementedRef.current = false;
       setIsDescriptionExpanded(false);
+      setLocalViewCount(null);
     }
   }, [open, agent, onViewIncrement]);
 
@@ -155,7 +167,7 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
           <div className="flex items-center space-x-6 text-sm text-muted-foreground">
             <div className="flex items-center space-x-2">
               <Eye className="w-4 h-4" />
-              <span>{agent.view_count} views</span>
+              <span>{localViewCount ?? agent.view_count} views</span>
             </div>
             <div className="flex items-center space-x-2">
               <Calendar className="w-4 h-4" />

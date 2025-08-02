@@ -57,6 +57,28 @@ const AllAgents = () => {
     setSelectedAgent(agent);
     setShowTrendingModal(true);
   };
+  
+  // Wrap incrementViewCount to also update local state
+  const handleViewIncrement = useCallback((agentId: string) => {
+    // Update local state optimistically
+    setAgents(prevAgents => 
+      prevAgents.map(agent => 
+        agent.id === agentId 
+          ? { ...agent, view_count: agent.view_count + 1 }
+          : agent
+      )
+    );
+    
+    // Also update the selected agent if it matches
+    setSelectedAgent(prev => 
+      prev && prev.id === agentId 
+        ? { ...prev, view_count: prev.view_count + 1 }
+        : prev
+    );
+    
+    // Call the original incrementViewCount
+    incrementViewCount(agentId);
+  }, [incrementViewCount]);
 
   useEffect(() => {
     loadAgents();
@@ -150,7 +172,7 @@ const AllAgents = () => {
           setShowTrendingModal(false);
           setSelectedAgent(null);
         }}
-        onViewIncrement={incrementViewCount}
+        onViewIncrement={handleViewIncrement}
       />
     </div>
   );
