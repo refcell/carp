@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiBaseUrl, API_ENDPOINTS } from '@/lib/api-config';
+import { supabase } from '@/integrations/supabase/client';
 
 // Types for the optimized API response format
 export interface OptimizedAgent {
@@ -216,4 +217,61 @@ export function useTrendingAgents(limit: number = 10) {
     gcTime: 10 * 60 * 1000, // 10 minutes
     refetchOnWindowFocus: false,
   });
+}
+
+/**
+ * Hook to increment view count for an agent and update caches
+ */
+export function useIncrementViewCount() {
+  const queryClient = useQueryClient();
+
+  const incrementViewCount = async (agentId: string) => {
+    console.log(`🔍 Incrementing view count for agent: ${agentId}`);
+    
+    // Extract the actual UUID from the composite ID (format: "name-version")
+    // For optimized agents, we need to find the actual UUID
+    // First, update all query caches optimistically
+    
+    // Update latest agents cache
+    queryClient.setQueriesData(
+      { queryKey: ["agents", "latest"] },
+      (oldData: Agent[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(agent => 
+          agent.id === agentId 
+            ? { ...agent, view_count: agent.view_count + 1 }
+            : agent
+        );
+      }
+    );
+    
+    // Update trending agents cache
+    queryClient.setQueriesData(
+      { queryKey: ["agents", "trending"] },
+      (oldData: Agent[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.map(agent => 
+          agent.id === agentId 
+            ? { ...agent, view_count: agent.view_count + 1 }
+            : agent
+        );
+      }
+    );
+    
+    // Update the regular agents cache as well
+    queryClient.setQueryData(["agents", "all"], (oldData: Agent[] = []) => 
+      oldData.map(agent => 
+        agent.id === agentId 
+          ? { ...agent, view_count: agent.view_count + 1 }
+          : agent
+      )
+    );
+
+    // For optimized agents, we do not have the real UUID, so we cannot call the database function
+    // The view count increment will happen when the user opens the full agent page
+    // This is just for optimistic UI updates
+    console.log(`✅ View count updated optimistically for agent: ${agentId}`);
+  };
+
+  return { incrementViewCount };
 }

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAgents } from '@/hooks/useAgents';
-import { useLatestAgents, useTrendingAgents, Agent } from '@/hooks/useOptimizedAgents';
+import { useLatestAgents, useTrendingAgents, useIncrementViewCount, Agent } from '@/hooks/useOptimizedAgents';
 import { useStats } from '@/hooks/useStats';
 import { SearchBar } from '@/components/SearchBar';
 import { AgentCard } from '@/components/AgentCard';
@@ -15,9 +15,11 @@ const Index = () => {
     agents: searchAgents,
     loading: searchLoading,
     searchQuery,
-    setSearchQuery,
-    incrementViewCount
+    setSearchQuery
   } = useAgents();
+  
+  // Use the optimized increment view count hook
+  const { incrementViewCount } = useIncrementViewCount();
 
   // Use optimized hooks for latest and trending agents
   const { data: latestAgents = [], isLoading: latestLoading, error: latestError } = useLatestAgents(10);
