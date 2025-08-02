@@ -7,13 +7,6 @@ interface ProfileData {
   avatar_url: string | null;
 }
 
-interface LeaderboardItem {
-  github_username: string | null;
-  display_name: string | null;
-  avatar_url: string | null;
-  user_id: string;
-  agents: { id: string }[];
-}
 
 export interface UserStats {
   github_username: string | null;
@@ -43,19 +36,9 @@ export function useStats() {
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
-      // Optimized leaderboard query using aggregation
+      // Use the new leaderboard function
       const { data: leaderboardData, error } = await supabase
-        .from('profiles')
-        .select(`
-          github_username,
-          display_name,
-          avatar_url,
-          user_id,
-          agents!inner(
-            id
-          )
-        `)
-        .eq('agents.is_public', true);
+        .rpc('get_user_leaderboard');
 
       if (error) {
         console.error('Error fetching leaderboard:', error);
@@ -66,35 +49,13 @@ export function useStats() {
         };
       }
 
-      // Count agents per user from the joined data
-      const userAgentCounts = new Map<string, { profile: ProfileData, count: number }>();
-      
-      leaderboardData?.forEach((item: LeaderboardItem) => {
-        const userId = item.user_id;
-        if (!userAgentCounts.has(userId)) {
-          userAgentCounts.set(userId, {
-            profile: {
-              github_username: item.github_username,
-              display_name: item.display_name,
-              avatar_url: item.avatar_url
-            },
-            count: 0
-          });
-        }
-        userAgentCounts.get(userId)!.count++;
-      });
-
-      // Convert to array and sort
-      const userStats: UserStats[] = Array.from(userAgentCounts.values())
-        .map(({ profile, count }) => ({
-          github_username: profile.github_username,
-          display_name: profile.display_name,
-          avatar_url: profile.avatar_url,
-          agent_count: count
-        }))
-        .filter(stat => stat.agent_count > 0)
-        .sort((a, b) => b.agent_count - a.agent_count)
-        .slice(0, 10);
+      // Map the leaderboard data to UserStats format
+      const userStats: UserStats[] = (leaderboardData || []).map((user: any) => ({
+        github_username: user.github_username,
+        display_name: user.display_name,
+        avatar_url: user.avatar_url,
+        agent_count: user.agent_count
+      }));
 
       return {
         totalAgentCount: agentCount || 0,

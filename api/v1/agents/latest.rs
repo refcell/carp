@@ -10,12 +10,15 @@ pub struct Agent {
     #[serde(default = "default_version")]
     pub current_version: String,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub author_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub download_count: u64,
     pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub view_count: u64,
 }
 
 fn default_version() -> String {
@@ -123,7 +126,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,current_version,description,author_name,created_at,updated_at,download_count,tags")
+        .select("name,description,created_at,updated_at,tags,view_count")
         .eq("is_public", "true")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)

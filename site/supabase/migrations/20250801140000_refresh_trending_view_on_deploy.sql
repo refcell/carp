@@ -1,5 +1,13 @@
 -- Refresh trending materialized view on deployment
 -- This ensures the view is populated with current data when the app starts
+--
+-- NOTE: This migration includes optional pg_cron setup. If you see errors about
+-- "cron.job does not exist", it means pg_cron extension is not enabled.
+-- The migration will continue without scheduling automatic refreshes.
+-- To enable pg_cron in Supabase:
+-- 1. Go to Database > Extensions in your Supabase dashboard
+-- 2. Enable the pg_cron extension
+-- 3. Re-run this migration
 
 -- First, ensure the view exists (should be created by earlier migration)
 DO $$
@@ -69,18 +77,41 @@ CREATE TRIGGER trigger_refresh_trending_on_agent_update
 -- Grant permissions for the trigger function
 GRANT EXECUTE ON FUNCTION public.refresh_trending_on_agent_update() TO service_role;
 
--- Add a scheduled refresh job (if supported by hosting platform)
+-- Add a scheduled refresh job (only if pg_cron is available)
 -- This is a fallback to ensure the view gets refreshed regularly
-INSERT INTO cron.job (jobname, schedule, command)
-VALUES (
-  'refresh_trending_agents_mv',
-  '0 */2 * * *',  -- Every 2 hours
-  'SELECT public.refresh_trending_view_job();'
-)
-ON CONFLICT (jobname) DO UPDATE SET
-  schedule = EXCLUDED.schedule,
-  command = EXCLUDED.command,
-  active = true;
+DO $$
+BEGIN
+  -- Check if pg_cron extension is installed and cron schema exists
+  IF EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname = 'pg_cron'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.schemata WHERE schema_name = 'cron'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'cron' AND table_name = 'job'
+  ) THEN
+    -- Only insert if the table exists
+    INSERT INTO cron.job (jobname, schedule, command)
+    VALUES (
+      'refresh_trending_agents_mv',
+      '0 */2 * * *',  -- Every 2 hours
+      'SELECT public.refresh_trending_view_job();'
+    )
+    ON CONFLICT (jobname) DO UPDATE SET
+      schedule = EXCLUDED.schedule,
+      command = EXCLUDED.command,
+      active = true;
+    
+    RAISE NOTICE 'Cron job for trending view refresh created successfully';
+  ELSE
+    RAISE NOTICE 'pg_cron extension not available - skipping cron job creation';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- If anything goes wrong, just log it and continue
+    RAISE NOTICE 'Could not create cron job: %', SQLERRM;
+END
+$$;
 
 -- Log successful refresh
 DO $$
