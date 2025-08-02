@@ -3,14 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
-/// Profile data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Profile {
-    pub github_username: Option<String>,
-    pub display_name: Option<String>,
-    pub avatar_url: Option<String>,
-}
-
 /// Optimized agent structure for trending endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
@@ -27,10 +19,6 @@ pub struct Agent {
     pub tags: Option<Vec<String>>,
     #[serde(default)]
     pub view_count: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profiles: Option<Profile>,
 }
 
 fn default_version() -> String {
@@ -125,7 +113,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     // Try materialized view first for optimal performance
     let response = client
         .from("trending_agents_mv")
-        .select("name,description,created_at,updated_at,tags,view_count,user_id")
+        .select("name,description,created_at,updated_at,tags,view_count")
         .order("view_count.desc") // Order by view count as fallback
         .limit(limit)
         .execute()
@@ -144,7 +132,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
                 Some(
                     client
                         .from("trending_agents_mv")
-                        .select("name,description,created_at,updated_at,tags,view_count,user_id")
+                        .select("name,description,created_at,updated_at,tags,view_count")
                         .order("view_count.desc")
                         .limit(limit)
                         .execute()
@@ -163,7 +151,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
             eprintln!("Falling back to regular agents table for trending query");
             client
                 .from("agents")
-                .select("name,description,created_at,updated_at,tags,view_count,user_id,profiles:user_id(github_username,display_name,avatar_url)")
+                .select("name,description,created_at,updated_at,tags,view_count")
                 .eq("is_public", "true")
                 .gte("view_count", "1")
                 .order("view_count.desc,updated_at.desc")

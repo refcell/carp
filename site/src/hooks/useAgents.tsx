@@ -32,14 +32,7 @@ export function useAgents() {
   const fetchAgentsWithProfiles = useCallback(async (search?: string, limit?: number, offset?: number) => {
     let query = supabase
       .from('agents')
-      .select(`
-        *,
-        profiles:profiles!user_id(
-          github_username,
-          display_name,
-          avatar_url
-        )
-      `)
+      .select('*')
       .eq('is_public', true)
       .order('created_at', { ascending: false });
 
@@ -56,14 +49,37 @@ export function useAgents() {
       query = query.range(offset, offset + (limit || 20) - 1);
     }
 
-    const { data, error } = await query;
+    const { data: agents, error } = await query;
     
     if (error) {
       console.error('Error fetching agents:', error);
       throw error;
     }
 
-    return data as Agent[];
+    // If we have agents, fetch their profiles
+    if (agents && agents.length > 0) {
+      const userIds = [...new Set(agents.map(a => a.user_id))].filter(Boolean);
+      
+      if (userIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('user_id, github_username, display_name, avatar_url')
+          .in('user_id', userIds);
+        
+        if (!profileError && profiles) {
+          // Create a map for quick lookup
+          const profileMap = new Map(profiles.map(p => [p.user_id, p]));
+          
+          // Attach profiles to agents
+          return agents.map(agent => ({
+            ...agent,
+            profiles: profileMap.get(agent.user_id) || null
+          })) as Agent[];
+        }
+      }
+    }
+
+    return agents as Agent[];
   }, []);
 
   const fetchAgents = useCallback(async (search?: string, limit?: number, offset?: number) => {
