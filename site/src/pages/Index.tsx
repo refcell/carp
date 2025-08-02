@@ -17,7 +17,7 @@ const Index = () => {
     searchQuery,
     setSearchQuery
   } = useAgents();
-  
+
   // Use the optimized increment view count hook
   const { incrementViewCount } = useIncrementViewCount();
 
@@ -27,10 +27,10 @@ const Index = () => {
 
   // Derive loading states
   const loading = latestLoading || trendingLoading;
-  
+
   // For search results, use the search agents
   const agents = searchQuery ? searchAgents : [];
-  
+
   // Create topAgents from trendingAgents for compatibility
   const topAgents = useMemo(() => trendingAgents.slice(0, 10), [trendingAgents]);
 
@@ -244,7 +244,7 @@ const Index = () => {
                       </CardTitle>
                       <CardDescription>Most viewed agents</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden p-6">
+                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden px-6 pb-6">
                       {loading ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           {Array.from({ length: 6 }).map((_, i) => (
@@ -280,7 +280,7 @@ const Index = () => {
                   </CardTitle>
                   <CardDescription>Recently published</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col lg:min-h-0 p-6">
+                <CardContent className="flex-1 flex flex-col lg:min-h-0 px-6 pb-6">
                   {loading ? (
                     <div className="flex flex-col gap-6">
                       {Array.from({ length: 3 }).map((_, i) => (
