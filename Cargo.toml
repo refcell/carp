@@ -46,6 +46,10 @@ path = "api/v1/agents/latest.rs"
 name = "v1-agents-trending"
 path = "api/v1/agents/trending.rs"
 
+[[bin]]
+name = "test"
+path = "api/v1/agents/test.rs"
+
 [dependencies]
 # Vercel runtime for serverless functions
 vercel_runtime = "1.0"
