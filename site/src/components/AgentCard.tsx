@@ -33,16 +33,16 @@ const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }:
           </div>
         </div>
         
-        {showAuthor && (agent.profiles || (agent as any).author_name) && (
+        {showAuthor && agent.profiles && (
           <div className="flex items-center space-x-2 mt-3">
             <Avatar className="w-6 h-6">
-              <AvatarImage src={agent.profiles?.avatar_url || ''} />
+              <AvatarImage src={agent.profiles.avatar_url || ''} />
               <AvatarFallback>
-                {((agent as any).author_name || agent.profiles?.display_name || agent.profiles?.github_username || 'U')[0].toUpperCase()}
+                {(agent.profiles.display_name || agent.profiles.github_username || 'U')[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <span className="text-sm text-muted-foreground">
-              {(agent as any).author_name || agent.profiles?.display_name || agent.profiles?.github_username || 'Unknown'}
+              {agent.profiles.display_name || agent.profiles.github_username}
             </span>
           </div>
         )}

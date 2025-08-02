@@ -3,6 +3,15 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
+/// Profile data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Profile {
+    pub user_id: String,
+    pub github_username: Option<String>,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
 /// Optimized agent structure for latest/trending endpoints - minimal data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
@@ -18,6 +27,9 @@ pub struct Agent {
     pub download_count: u64,
     pub tags: Option<Vec<String>>,
     pub definition: Option<serde_json::Value>,
+    pub user_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<Profile>,
 }
 
 fn default_version() -> String {
@@ -125,7 +137,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition")
+        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition,user_id")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
         .execute()
@@ -160,12 +172,52 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     eprintln!("[DEBUG] Response body length: {}", body.len());
     eprintln!("[DEBUG] Response preview: {}", body.chars().take(200).collect::<String>());
 
-    let agents: Vec<Agent> = serde_json::from_str(&body).map_err(|e| {
+    let mut agents: Vec<Agent> = serde_json::from_str(&body).map_err(|e| {
         eprintln!("[ERROR] Failed to parse agents response: {}", body);
         eprintln!("[ERROR] Parse error: {}", e);
         Error::from(format!("Failed to parse agents: {e}"))
     })?;
 
     eprintln!("[DEBUG] Successfully parsed {} agents", agents.len());
+    
+    // Fetch profiles for the agents
+    if !agents.is_empty() {
+        let user_ids: Vec<String> = agents.iter().map(|a| a.user_id.clone()).collect();
+        
+        eprintln!("[DEBUG] Fetching profiles for {} users", user_ids.len());
+        
+        let profile_response = client
+            .from("profiles")
+            .select("user_id,github_username,display_name,avatar_url")
+            .in_("user_id", &user_ids)
+            .execute()
+            .await?;
+            
+        if profile_response.status().is_success() {
+            let profile_body = profile_response.text().await?;
+            
+            if !profile_body.is_empty() && profile_body != "[]" {
+                let profiles: Vec<Profile> = serde_json::from_str(&profile_body).map_err(|e| {
+                    eprintln!("[ERROR] Failed to parse profiles: {}", e);
+                    Error::from(format!("Failed to parse profiles: {e}"))
+                })?;
+                
+                // Create a map for quick lookup
+                use std::collections::HashMap;
+                let profile_map: HashMap<String, Profile> = profiles
+                    .into_iter()
+                    .map(|p| (p.user_id.clone(), p))
+                    .collect();
+                
+                // Attach profiles to agents
+                for agent in &mut agents {
+                    if let Some(profile) = profile_map.get(&agent.user_id) {
+                        agent.profiles = Some(profile.clone());
+                    }
+                }
+            }
+        }
+    }
+    
     Ok(agents)
 }
