@@ -23,6 +23,9 @@ const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }:
           <div className="flex-1 min-w-0">
             <CardTitle className="text-lg font-semibold line-clamp-1 mb-2">
               {agent.name}
+              {agent.definition?.version && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">v{agent.definition.version}</span>
+              )}
             </CardTitle>
             <CardDescription className="line-clamp-2 mt-1 text-sm leading-relaxed">
               {agent.description}
@@ -30,16 +33,16 @@ const AgentCard = memo(function AgentCard({ agent, onClick, showAuthor = true }:
           </div>
         </div>
         
-        {showAuthor && agent.profiles && (
+        {showAuthor && (agent.profiles || (agent as any).author_name) && (
           <div className="flex items-center space-x-2 mt-3">
             <Avatar className="w-6 h-6">
-              <AvatarImage src={agent.profiles.avatar_url || ''} />
+              <AvatarImage src={agent.profiles?.avatar_url || ''} />
               <AvatarFallback>
-                {agent.profiles.display_name?.[0] || agent.profiles.github_username?.[0] || 'U'}
+                {((agent as any).author_name || agent.profiles?.display_name || agent.profiles?.github_username || 'U')[0].toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <span className="text-sm text-muted-foreground">
-              {agent.profiles.display_name || agent.profiles.github_username}
+              {(agent as any).author_name || agent.profiles?.display_name || agent.profiles?.github_username || 'Unknown'}
             </span>
           </div>
         )}
