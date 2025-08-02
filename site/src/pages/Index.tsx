@@ -4,6 +4,7 @@ import { useLatestAgents, useTrendingAgents, Agent } from '@/hooks/useOptimizedA
 import { useStats } from '@/hooks/useStats';
 import { SearchBar } from '@/components/SearchBar';
 import { AgentCard } from '@/components/AgentCard';
+import { CompactAgentCard } from '@/components/CompactAgentCard';
 import { TrendingModal } from '@/components/TrendingModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -286,9 +287,9 @@ const Index = () => {
                       ))}
                     </div>
                   ) : latestAgents.length > 0 ? (
-                    <div className="space-y-4 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
-                      {latestAgents.slice(0, 6).map((agent) => (
-                        <AgentCard
+                    <div className="space-y-3 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
+                      {latestAgents.slice(0, 8).map((agent) => (
+                        <CompactAgentCard
                           key={agent.id}
                           agent={agent}
                           onClick={() => handleAgentClick(agent)}

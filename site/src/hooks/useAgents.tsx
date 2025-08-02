@@ -34,7 +34,7 @@ export function useAgents() {
       .from('agents')
       .select(`
         *,
-        profiles:user_id(
+        profiles:profiles!user_id(
           github_username,
           display_name,
           avatar_url

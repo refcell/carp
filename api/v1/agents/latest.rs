@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use vercel_runtime::{run, Body, Error, Request, Response};
 
+/// Profile data structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Profile {
+    pub github_username: Option<String>,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
 /// Optimized agent structure for latest/trending endpoints - minimal data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
@@ -19,6 +27,10 @@ pub struct Agent {
     pub tags: Option<Vec<String>>,
     #[serde(default)]
     pub view_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profiles: Option<Profile>,
 }
 
 fn default_version() -> String {
@@ -126,7 +138,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,description,created_at,updated_at,tags,view_count")
+        .select("name,description,created_at,updated_at,tags,view_count,user_id,profiles:user_id(github_username,display_name,avatar_url)")
         .eq("is_public", "true")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
