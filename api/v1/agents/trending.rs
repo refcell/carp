@@ -16,6 +16,7 @@ pub struct Profile {
 /// Optimized agent structure for trending endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
+    pub id: String, // Include the real UUID for view count incrementing
     pub name: String,
     #[serde(default = "default_version")]
     pub current_version: String,
@@ -127,7 +128,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     // Try materialized view first for optimal performance
     let response = client
         .from("trending_agents_mv")
-        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
+        .select("id,name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
         .order("view_count.desc") // Order by view count as fallback
         .limit(limit)
         .execute()
@@ -146,7 +147,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
                 Some(
                     client
                         .from("trending_agents_mv")
-                        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
+                        .select("id,name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
                         .order("view_count.desc")
                         .limit(limit)
                         .execute()
@@ -165,7 +166,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
             eprintln!("Falling back to regular agents table for trending query");
             client
                 .from("agents")
-                .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
+                .select("id,name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
                 .gte("view_count", "1")
                 .order("view_count.desc,updated_at.desc")
                 .limit(limit)

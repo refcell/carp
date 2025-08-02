@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Types for the optimized API response format
 export interface OptimizedAgent {
+  id: string; // Real UUID from database
   name: string;
   current_version: string;
   description: string;
@@ -51,7 +52,7 @@ export interface Agent {
 const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => {
   console.log('[convertOptimizedAgent] Converting:', optimizedAgent);
   return {
-  id: `${optimizedAgent.name}-${optimizedAgent.current_version}`, // Generate ID from name+version
+  id: optimizedAgent.id, // Use real UUID from database
   name: optimizedAgent.name,
   description: optimizedAgent.description,
   definition: optimizedAgent.definition || { version: optimizedAgent.current_version }, // Use actual definition or fallback
@@ -228,9 +229,7 @@ export function useIncrementViewCount() {
   const incrementViewCount = async (agentId: string) => {
     console.log(`🔍 Incrementing view count for agent: ${agentId}`);
     
-    // Extract the actual UUID from the composite ID (format: "name-version")
-    // For optimized agents, we need to find the actual UUID
-    // First, update all query caches optimistically
+    // First, update all query caches optimistically for immediate UI feedback
     
     // Update latest agents cache
     queryClient.setQueriesData(
@@ -267,10 +266,62 @@ export function useIncrementViewCount() {
       )
     );
 
-    // For optimized agents, we do not have the real UUID, so we cannot call the database function
-    // The view count increment will happen when the user opens the full agent page
-    // This is just for optimistic UI updates
-    console.log(`✅ View count updated optimistically for agent: ${agentId}`);
+    // Now call the database to persist the change
+    // We now have the real UUID from the optimized API, so we can make the database call
+    try {
+      console.log('📡 Updating database with real agent UUID:', agentId);
+      
+      // Use PostgreSQL's atomic increment function
+      const { data, error } = await supabase.rpc('increment_view_count', {
+        agent_id: agentId
+      });
+
+      if (error) {
+        console.error('❌ Database RPC error:', error);
+        throw error;
+      }
+
+      console.log('✅ Database updated successfully');
+      return data;
+    } catch (error) {
+      console.error('❌ Error incrementing view count:', error);
+      
+      // Revert optimistic updates on error
+      queryClient.setQueriesData(
+        { queryKey: ["agents", "latest"] },
+        (oldData: Agent[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.map(agent => 
+            agent.id === agentId 
+              ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
+              : agent
+          );
+        }
+      );
+      
+      queryClient.setQueriesData(
+        { queryKey: ["agents", "trending"] },
+        (oldData: Agent[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.map(agent => 
+            agent.id === agentId 
+              ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
+              : agent
+          );
+        }
+      );
+      
+      queryClient.setQueryData(["agents", "all"], (oldData: Agent[] = []) => 
+        oldData.map(agent => 
+          agent.id === agentId 
+            ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
+            : agent
+        )
+      );
+      
+      // Re-throw the error so the UI can handle it if needed
+      throw error;
+    }
   };
 
   return { incrementViewCount };

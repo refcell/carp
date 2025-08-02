@@ -15,6 +15,7 @@ pub struct Profile {
 /// Optimized agent structure for latest/trending endpoints - minimal data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
+    pub id: String, // Include the real UUID for view count incrementing
     pub name: String,
     #[serde(default = "default_version")]
     pub current_version: String,
@@ -139,7 +140,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
+        .select("id,name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
         .execute()
