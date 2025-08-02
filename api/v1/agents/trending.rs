@@ -7,13 +7,19 @@ use vercel_runtime::{run, Body, Error, Request, Response};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub name: String,
+    #[serde(default = "default_version")]
     pub current_version: String,
     pub description: String,
     pub author_name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
     pub download_count: u64,
     pub tags: Option<Vec<String>>,
+}
+
+fn default_version() -> String {
+    "1.0.0".to_string()
 }
 
 /// Trending agents response
@@ -79,14 +85,19 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
         .or_else(|_| env::var("SUPABASE_SERVICE_ROLE_KEY"))
         .unwrap_or_default();
 
+    eprintln!("[DEBUG] Trending - SUPABASE_URL present: {}", !supabase_url.is_empty());
+    eprintln!("[DEBUG] Trending - SUPABASE_KEY present: {}", !supabase_key.is_empty());
+
     if supabase_url.is_empty() || supabase_key.is_empty() {
+        eprintln!("[ERROR] Trending - Database not configured");
         return Err(Error::from(
             "Database not configured - missing SUPABASE_URL or SUPABASE_ANON_KEY",
         ));
     }
 
     let client = postgrest::Postgrest::new(format!("{supabase_url}/rest/v1"))
-        .insert_header("apikey", &supabase_key);
+        .insert_header("apikey", &supabase_key)
+        .insert_header("Authorization", format!("Bearer {}", &supabase_key));
 
     // Try to ensure the materialized view is populated if we have service role key
     if env::var("SUPABASE_SERVICE_ROLE_KEY").is_ok() {
@@ -163,13 +174,19 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
 
     // Return empty list if no data
     if body.is_empty() || body == "[]" {
+        eprintln!("[DEBUG] Trending - Empty response from database");
         return Ok(Vec::new());
     }
 
+    eprintln!("[DEBUG] Trending - Response body length: {}", body.len());
+    eprintln!("[DEBUG] Trending - Response preview: {}", body.chars().take(200).collect::<String>());
+
     let agents: Vec<Agent> = serde_json::from_str(&body).map_err(|e| {
-        eprintln!("Failed to parse trending agents response: {}", body);
+        eprintln!("[ERROR] Failed to parse trending agents response: {}", body);
+        eprintln!("[ERROR] Trending - Parse error: {}", e);
         Error::from(format!("Failed to parse agents: {e}"))
     })?;
 
+    eprintln!("[DEBUG] Trending - Successfully parsed {} agents", agents.len());
     Ok(agents)
 }
