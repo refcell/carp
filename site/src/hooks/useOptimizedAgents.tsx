@@ -6,7 +6,7 @@ export interface OptimizedAgent {
   name: string;
   current_version: string;
   description: string;
-  author_name: string;
+  author_name: string | null;
   created_at: string;
   updated_at: string;
   download_count: number;
@@ -38,7 +38,9 @@ export interface Agent {
 }
 
 // Convert optimized agent to legacy agent format for compatibility
-const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => ({
+const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => {
+  console.log('[convertOptimizedAgent] Converting:', optimizedAgent);
+  return {
   id: `${optimizedAgent.name}-${optimizedAgent.current_version}`, // Generate ID from name+version
   name: optimizedAgent.name,
   description: optimizedAgent.description,
@@ -49,12 +51,13 @@ const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => ({
   updated_at: optimizedAgent.updated_at,
   user_id: '', // Not available in optimized response
   is_public: true, // Assume public since it's in the public API
-  profiles: {
+  profiles: optimizedAgent.author_name ? {
     github_username: null,
     display_name: optimizedAgent.author_name,
     avatar_url: null,
-  },
-});
+  } : null,
+  };
+};
 
 /**
  * Hook to fetch latest agents using the optimized API endpoint
@@ -85,11 +88,40 @@ export function useLatestAgents(limit: number = 10) {
           return [];
         }
 
-        const data: OptimizedAgentsResponse = await response.json();
-        console.log('[useLatestAgents] Received data:', data);
+        const text = await response.text();
+        console.log('[useLatestAgents] Raw response:', text);
+        
+        let data: OptimizedAgentsResponse;
+        try {
+          data = JSON.parse(text);
+          console.log('[useLatestAgents] Parsed data:', data);
+        } catch (e) {
+          console.error('[useLatestAgents] Failed to parse JSON:', e);
+          console.error('[useLatestAgents] Raw text was:', text);
+          return [];
+        }
         
         // Convert optimized agents to legacy format for compatibility
-        return data.agents?.map(convertOptimizedAgent) || [];
+        if (!data || !data.agents) {
+          console.warn('[useLatestAgents] No agents array in response:', data);
+          return [];
+        }
+        
+        try {
+          const converted = data.agents.map(agent => {
+            try {
+              return convertOptimizedAgent(agent);
+            } catch (e) {
+              console.error('[useLatestAgents] Failed to convert agent:', agent, e);
+              return null;
+            }
+          }).filter(Boolean) as Agent[];
+          console.log('[useLatestAgents] Successfully converted agents:', converted.length);
+          return converted;
+        } catch (e) {
+          console.error('[useLatestAgents] Failed to convert agents:', e);
+          return [];
+        }
       } catch (error) {
         console.error('[useLatestAgents] Fetch error:', error);
         // Return empty array on error
@@ -131,11 +163,40 @@ export function useTrendingAgents(limit: number = 10) {
           return [];
         }
 
-        const data: OptimizedAgentsResponse = await response.json();
-        console.log('[useTrendingAgents] Received data:', data);
+        const text = await response.text();
+        console.log('[useTrendingAgents] Raw response:', text);
+        
+        let data: OptimizedAgentsResponse;
+        try {
+          data = JSON.parse(text);
+          console.log('[useTrendingAgents] Parsed data:', data);
+        } catch (e) {
+          console.error('[useTrendingAgents] Failed to parse JSON:', e);
+          console.error('[useTrendingAgents] Raw text was:', text);
+          return [];
+        }
         
         // Convert optimized agents to legacy format for compatibility
-        return data.agents?.map(convertOptimizedAgent) || [];
+        if (!data || !data.agents) {
+          console.warn('[useTrendingAgents] No agents array in response:', data);
+          return [];
+        }
+        
+        try {
+          const converted = data.agents.map(agent => {
+            try {
+              return convertOptimizedAgent(agent);
+            } catch (e) {
+              console.error('[useTrendingAgents] Failed to convert agent:', agent, e);
+              return null;
+            }
+          }).filter(Boolean) as Agent[];
+          console.log('[useTrendingAgents] Successfully converted agents:', converted.length);
+          return converted;
+        } catch (e) {
+          console.error('[useTrendingAgents] Failed to convert agents:', e);
+          return [];
+        }
       } catch (error) {
         console.error('[useTrendingAgents] Fetch error:', error);
         // Return empty array on error

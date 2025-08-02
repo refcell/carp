@@ -17,8 +17,6 @@ pub struct Agent {
     #[serde(default)]
     pub download_count: u64,
     pub tags: Option<Vec<String>>,
-    #[serde(default)]
-    pub view_count: u64,
 }
 
 fn default_version() -> String {
@@ -126,8 +124,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,description,created_at,updated_at,tags,view_count")
-        .eq("is_public", "true")
+        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
         .execute()
