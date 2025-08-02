@@ -1,6 +1,6 @@
 use crate::auth::{
-    authenticate_api_key, authenticate_jwt, extract_bearer_token, guess_token_type, sync_jwt_user, sync_api_key_user,
-    ApiError, AuthConfig, AuthenticatedUser, TokenType,
+    authenticate_api_key, authenticate_jwt, extract_bearer_token, guess_token_type,
+    sync_api_key_user, sync_jwt_user, ApiError, AuthConfig, AuthenticatedUser, TokenType,
 };
 use serde_json::json;
 use vercel_runtime::{Body, Request, Response};
@@ -177,9 +177,7 @@ pub fn require_scope(user: &AuthenticatedUser, required_scope: &str) -> Result<(
             403,
             &ApiError {
                 error: "insufficient_scope".to_string(),
-                message: format!(
-                    "Required scope '{required_scope}' not found in user permissions"
-                ),
+                message: format!("Required scope '{required_scope}' not found in user permissions"),
                 details: Some(json!({
                     "required_scope": required_scope,
                     "user_scopes": user.scopes,

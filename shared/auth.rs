@@ -379,7 +379,10 @@ pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Res
     });
 
     let response = client
-        .post(format!("{}/rest/v1/rpc/sync_jwt_user_fixed", config.supabase_url))
+        .post(format!(
+            "{}/rest/v1/rpc/sync_jwt_user_fixed",
+            config.supabase_url
+        ))
         .header("apikey", &config.supabase_service_role_key)
         .header(
             "Authorization",
@@ -409,7 +412,10 @@ pub async fn sync_jwt_user(user: &AuthenticatedUser, config: &AuthConfig) -> Res
 
 /// Ensure API key user exists in database
 /// This handles users authenticated via API keys who may not have proper auth.users entries
-pub async fn sync_api_key_user(user: &AuthenticatedUser, config: &AuthConfig) -> Result<(), ApiError> {
+pub async fn sync_api_key_user(
+    user: &AuthenticatedUser,
+    config: &AuthConfig,
+) -> Result<(), ApiError> {
     if config.is_development() {
         return Ok(()); // Skip in development
     }
@@ -424,7 +430,10 @@ pub async fn sync_api_key_user(user: &AuthenticatedUser, config: &AuthConfig) ->
     });
 
     let response = client
-        .post(format!("{}/rest/v1/rpc/sync_api_key_user", config.supabase_url))
+        .post(format!(
+            "{}/rest/v1/rpc/sync_api_key_user",
+            config.supabase_url
+        ))
         .header("apikey", &config.supabase_service_role_key)
         .header(
             "Authorization",

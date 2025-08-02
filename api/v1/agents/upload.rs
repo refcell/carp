@@ -153,14 +153,17 @@ pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
     }
 
     // Extract the original API key from the request for database function
-    let auth_header = req.headers()
+    let auth_header = req
+        .headers()
         .get("authorization")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
 
     // Add debug logging for authentication state
-    eprintln!("DEBUG: Upload request from user_id: {}, auth_method: {:?}, scopes: {:?}", 
-        authenticated_user.user_id, authenticated_user.auth_method, authenticated_user.scopes);
+    eprintln!(
+        "DEBUG: Upload request from user_id: {}, auth_method: {:?}, scopes: {:?}",
+        authenticated_user.user_id, authenticated_user.auth_method, authenticated_user.scopes
+    );
 
     // Process the upload request
     match upload_agent(upload_request, &authenticated_user, auth_header).await {
@@ -396,9 +399,18 @@ async fn upload_agent(
     let supabase_url = env::var("SUPABASE_URL").unwrap_or_default();
     let supabase_key = env::var("SUPABASE_SERVICE_ROLE_KEY").unwrap_or_default();
 
-    eprintln!("DEBUG: Database config - URL: {}, Key: {}", 
-        if supabase_url.is_empty() { "MISSING" } else { "SET" },
-        if supabase_key.is_empty() { "MISSING" } else { "SET" }
+    eprintln!(
+        "DEBUG: Database config - URL: {}, Key: {}",
+        if supabase_url.is_empty() {
+            "MISSING"
+        } else {
+            "SET"
+        },
+        if supabase_key.is_empty() {
+            "MISSING"
+        } else {
+            "SET"
+        }
     );
 
     if supabase_url.is_empty() || supabase_key.is_empty() {
@@ -420,7 +432,7 @@ async fn upload_agent(
                 "user_email": user.metadata.email,
                 "github_username": user.metadata.github_username
             });
-            
+
             client
                 .post(format!("{}/rest/v1/rpc/sync_api_key_user", supabase_url))
                 .header("apikey", &supabase_key)
@@ -439,7 +451,7 @@ async fn upload_agent(
                 "display_name": user.metadata.github_username,
                 "avatar_url": null
             });
-            
+
             client
                 .post(format!("{}/rest/v1/rpc/sync_jwt_user_fixed", supabase_url))
                 .header("apikey", &supabase_key)
@@ -472,7 +484,7 @@ async fn upload_agent(
 
     // Prepare parameters for create_agent function
     let version = request.version.unwrap_or_else(|| "1.0.0".to_string());
-    
+
     // First, try to use the safe agent creation function that bypasses RLS
     let create_agent_params = json!({
         "p_user_id": user.user_id,
@@ -505,12 +517,14 @@ async fn upload_agent(
 
     let status_code = response.status();
     eprintln!("DEBUG: Database response status: {}", status_code);
-    
+
     if response.status().is_success() {
         // Success path - parse response
-        let response_body = response.text().await
+        let response_body = response
+            .text()
+            .await
             .map_err(|e| format!("Failed to read response: {e}"))?;
-            
+
         eprintln!("DEBUG: Database response body: {}", response_body);
 
         // Parse the created agent from database response
@@ -519,16 +533,26 @@ async fn upload_agent(
 
         if let Some(agent_data) = created_agents.first() {
             let agent = Agent {
-                name: agent_data["name"].as_str().unwrap_or(&request.name).to_string(),
+                name: agent_data["name"]
+                    .as_str()
+                    .unwrap_or(&request.name)
+                    .to_string(),
                 version: version.clone(),
-                description: agent_data["description"].as_str().unwrap_or(&request.description).to_string(),
-                author: agent_data["author_name"].as_str().unwrap_or(&format!("user-{}", user.user_id)).to_string(),
+                description: agent_data["description"]
+                    .as_str()
+                    .unwrap_or(&request.description)
+                    .to_string(),
+                author: agent_data["author_name"]
+                    .as_str()
+                    .unwrap_or(&format!("user-{}", user.user_id))
+                    .to_string(),
                 created_at: serde_json::from_value(agent_data["created_at"].clone())
                     .unwrap_or_else(|_| Utc::now()),
                 updated_at: serde_json::from_value(agent_data["updated_at"].clone())
                     .unwrap_or_else(|_| Utc::now()),
                 download_count: agent_data["download_count"].as_u64().unwrap_or(0),
-                tags: serde_json::from_value(agent_data["tags"].clone()).unwrap_or(request.tags.clone()),
+                tags: serde_json::from_value(agent_data["tags"].clone())
+                    .unwrap_or(request.tags.clone()),
                 readme: Some(request.content.clone()),
                 homepage: request.homepage.clone(),
                 repository: request.repository.clone(),
@@ -539,14 +563,14 @@ async fn upload_agent(
             return Err("No agent data returned from database".to_string());
         }
     }
-    
+
     // Safe function failed, get error details
     let error_text = response.text().await.unwrap_or_default();
     eprintln!("DEBUG: Safe function failed with response: {}", error_text);
-    
+
     // Try direct insert as fallback
     eprintln!("DEBUG: Safe function failed, trying direct insert as fallback");
-    
+
     let agent_data = json!({
         "user_id": user.user_id,
         "name": request.name,
@@ -562,7 +586,7 @@ async fn upload_agent(
         "current_version": version,
         "is_public": true
     });
-    
+
     let fallback_response = client
         .post(format!("{supabase_url}/rest/v1/agents"))
         .header("apikey", &supabase_key)
@@ -573,33 +597,46 @@ async fn upload_agent(
         .send()
         .await
         .map_err(|e| format!("Fallback database request failed: {e}"))?;
-        
+
     let fallback_status = fallback_response.status();
     if !fallback_status.is_success() {
         let fallback_error = fallback_response.text().await.unwrap_or_default();
         eprintln!("DEBUG: Fallback also failed: {}", fallback_error);
-        return Err(format!("Database error - Safe function failed ({}): {}\nFallback failed ({}): {}", 
-            status_code, error_text, fallback_status, fallback_error));
+        return Err(format!(
+            "Database error - Safe function failed ({}): {}\nFallback failed ({}): {}",
+            status_code, error_text, fallback_status, fallback_error
+        ));
     }
-    
+
     eprintln!("DEBUG: Fallback succeeded");
-    
+
     // Use fallback response for parsing
-    let response_body = fallback_response.text().await
+    let response_body = fallback_response
+        .text()
+        .await
         .map_err(|e| format!("Failed to read fallback response: {e}"))?;
-        
+
     eprintln!("DEBUG: Fallback response body: {}", response_body);
 
     // Parse the created agent from fallback response
     let created_agents: Vec<serde_json::Value> = serde_json::from_str(&response_body)
         .map_err(|e| format!("Failed to parse fallback response '{}': {e}", response_body))?;
-        
+
     if let Some(agent_data) = created_agents.first() {
         let agent = Agent {
-            name: agent_data["name"].as_str().unwrap_or(&request.name).to_string(),
+            name: agent_data["name"]
+                .as_str()
+                .unwrap_or(&request.name)
+                .to_string(),
             version,
-            description: agent_data["description"].as_str().unwrap_or(&request.description).to_string(),
-            author: agent_data["author_name"].as_str().unwrap_or(&format!("user-{}", user.user_id)).to_string(),
+            description: agent_data["description"]
+                .as_str()
+                .unwrap_or(&request.description)
+                .to_string(),
+            author: agent_data["author_name"]
+                .as_str()
+                .unwrap_or(&format!("user-{}", user.user_id))
+                .to_string(),
             created_at: serde_json::from_value(agent_data["created_at"].clone())
                 .unwrap_or_else(|_| Utc::now()),
             updated_at: serde_json::from_value(agent_data["updated_at"].clone())

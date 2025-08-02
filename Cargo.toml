@@ -38,6 +38,18 @@ path = "api/v1/agents/upload.rs"
 name = "v1-auth-api-keys"
 path = "api/v1/auth/api-keys.rs"
 
+[[bin]]
+name = "v1-agents-latest"
+path = "api/v1/agents/latest.rs"
+
+[[bin]]
+name = "v1-agents-trending"
+path = "api/v1/agents/trending.rs"
+
+[[bin]]
+name = "test"
+path = "api/v1/agents/test.rs"
+
 [dependencies]
 # Vercel runtime for serverless functions
 vercel_runtime = "1.0"

@@ -79,7 +79,10 @@ pub async fn execute(
 
     // Show usage instructions
     println!("\nTo use this agent:");
-    println!("  # The agent definition is now available at {}", output_path.display());
+    println!(
+        "  # The agent definition is now available at {}",
+        output_path.display()
+    );
     println!("  # You can reference this agent in your code or agent orchestration system");
 
     Ok(())
@@ -111,13 +114,14 @@ async fn get_agent_definition(
 ) -> CarpResult<crate::api::types::Agent> {
     // Search for the specific agent
     let response = client.search(name, Some(1000), true).await?;
-    
+
     // Find the agent with matching name and version
     let target_version = version.unwrap_or("latest");
-    
+
     if target_version == "latest" {
         // Find the latest version (versions are sorted in descending order from search)
-        response.agents
+        response
+            .agents
             .into_iter()
             .find(|agent| agent.name == name)
             .ok_or_else(|| CarpError::Api {
@@ -126,7 +130,8 @@ async fn get_agent_definition(
             })
     } else {
         // Find exact version match
-        response.agents
+        response
+            .agents
             .into_iter()
             .find(|agent| agent.name == name && agent.version == target_version)
             .ok_or_else(|| CarpError::Api {
@@ -144,25 +149,23 @@ async fn determine_output_file(
 ) -> CarpResult<PathBuf> {
     if let Some(output_path) = output {
         let path = expand_tilde(&output_path);
-        
+
         // If the path is a directory (or will be a directory), append the agent name as filename
         if path.is_dir() || output_path.ends_with('/') || output_path.ends_with('\\') {
             return Ok(path.join(format!("{name}.md")));
         }
-        
+
         return Ok(path);
     }
 
     // Get default agents directory
     let default_agents_dir = get_default_agents_dir(config)?;
-    
+
     // Ask user where to place the file
-    let prompt_text = format!(
-        "Where would you like to save the '{name}' agent definition?"
-    );
-    
+    let prompt_text = format!("Where would you like to save the '{name}' agent definition?");
+
     let default_path = default_agents_dir.join(format!("{name}.md"));
-    
+
     let file_path = Text::new(&prompt_text)
         .with_default(&default_path.to_string_lossy())
         .with_help_message("Enter the full path where you want to save the agent definition file")
@@ -179,7 +182,7 @@ async fn determine_output_file(
         })?;
 
     let path = expand_tilde(&file_path);
-    
+
     // If the path is a directory (or will be a directory), append the agent name as filename
     if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
         Ok(path.join(format!("{name}.md")))
@@ -212,7 +215,7 @@ fn get_default_agents_dir(config: &crate::config::Config) -> CarpResult<PathBuf>
     // Use ~/.config/carp/agents/ as default
     let config_dir = dirs::config_dir()
         .ok_or_else(|| CarpError::Config("Unable to find config directory".to_string()))?;
-    
+
     let agents_dir = config_dir.join("carp").join("agents");
     Ok(agents_dir)
 }
@@ -220,68 +223,80 @@ fn get_default_agents_dir(config: &crate::config::Config) -> CarpResult<PathBuf>
 /// Create agent definition file content
 fn create_agent_definition_file(agent: &crate::api::types::Agent) -> CarpResult<String> {
     let mut content = String::new();
-    
+
     // Add YAML frontmatter
     content.push_str("---\n");
     content.push_str(&format!("name: {}\n", agent.name));
     content.push_str(&format!("version: {}\n", agent.version));
     content.push_str(&format!("description: {}\n", agent.description));
     content.push_str(&format!("author: {}\n", agent.author));
-    
+
     if let Some(homepage) = &agent.homepage {
         content.push_str(&format!("homepage: {homepage}\n"));
     }
-    
+
     if let Some(repository) = &agent.repository {
         content.push_str(&format!("repository: {repository}\n"));
     }
-    
+
     if let Some(license) = &agent.license {
         content.push_str(&format!("license: {license}\n"));
     }
-    
+
     if !agent.tags.is_empty() {
         content.push_str("tags:\n");
         for tag in &agent.tags {
             content.push_str(&format!("  - {tag}\n"));
         }
     }
-    
-    content.push_str(&format!("created_at: {}\n", agent.created_at.format("%Y-%m-%d %H:%M:%S UTC")));
-    content.push_str(&format!("updated_at: {}\n", agent.updated_at.format("%Y-%m-%d %H:%M:%S UTC")));
+
+    content.push_str(&format!(
+        "created_at: {}\n",
+        agent.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+    ));
+    content.push_str(&format!(
+        "updated_at: {}\n",
+        agent.updated_at.format("%Y-%m-%d %H:%M:%S UTC")
+    ));
     content.push_str(&format!("download_count: {}\n", agent.download_count));
     content.push_str("---\n\n");
-    
+
     // Add title
     content.push_str(&format!("# {} Agent\n\n", agent.name));
-    
+
     // Add description
     content.push_str(&format!("{}\n\n", agent.description));
-    
+
     // Add metadata section
     content.push_str("## Metadata\n\n");
     content.push_str(&format!("- **Version**: {}\n", agent.version));
     content.push_str(&format!("- **Author**: {}\n", agent.author));
     content.push_str(&format!("- **Downloads**: {}\n", agent.download_count));
-    content.push_str(&format!("- **Created**: {}\n", agent.created_at.format("%Y-%m-%d %H:%M UTC")));
-    content.push_str(&format!("- **Updated**: {}\n", agent.updated_at.format("%Y-%m-%d %H:%M UTC")));
-    
+    content.push_str(&format!(
+        "- **Created**: {}\n",
+        agent.created_at.format("%Y-%m-%d %H:%M UTC")
+    ));
+    content.push_str(&format!(
+        "- **Updated**: {}\n",
+        agent.updated_at.format("%Y-%m-%d %H:%M UTC")
+    ));
+
     if !agent.tags.is_empty() {
         content.push_str(&format!("- **Tags**: {}\n", agent.tags.join(", ")));
     }
-    
+
     if let Some(homepage) = &agent.homepage {
         content.push_str(&format!("- **Homepage**: {homepage}\n"));
     }
-    
+
     if let Some(repository) = &agent.repository {
         content.push_str(&format!("- **Repository**: {repository}\n"));
     }
-    
+
     if let Some(license) = &agent.license {
         content.push_str(&format!("- **License**: {license}\n"));
     }
-    
+
     // Add README if available
     if let Some(readme) = &agent.readme {
         if !readme.trim().is_empty() {
@@ -290,16 +305,15 @@ fn create_agent_definition_file(agent: &crate::api::types::Agent) -> CarpResult<
             content.push('\n');
         }
     }
-    
+
     Ok(content)
 }
-
 
 /// Interactive agent selection using inquire
 async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     // Step 1: Get unique agent names
     let agent_names = get_unique_agent_names(client).await?;
-    
+
     if agent_names.is_empty() {
         return Err(CarpError::Api {
             status: 404,
@@ -331,7 +345,7 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
 
     // Step 3: Get versions for selected agent
     let versions = get_agent_versions(client, &selected_agent).await?;
-    
+
     if versions.is_empty() {
         return Err(CarpError::Api {
             status: 404,
@@ -352,7 +366,7 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     } else {
         Select::new(
             &format!("Select a version for {}:", selected_agent.blue().bold()),
-            versions.clone()
+            versions.clone(),
         )
         .with_page_size(15)
         .with_help_message("↑/↓ to navigate • Enter to select • Ctrl+C to cancel")
@@ -377,7 +391,9 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
     );
 
     // Step 5: Get and display agent definition
-    if let Ok(agent_info) = get_agent_definition(client, &selected_agent, Some(&selected_version)).await {
+    if let Ok(agent_info) =
+        get_agent_definition(client, &selected_agent, Some(&selected_version)).await
+    {
         display_agent_definition(&agent_info);
     }
 
@@ -387,12 +403,12 @@ async fn interactive_agent_selection(client: &ApiClient) -> CarpResult<String> {
 /// Get unique agent names from the registry
 async fn get_unique_agent_names(client: &ApiClient) -> CarpResult<Vec<String>> {
     let response = client.search("", Some(1000), false).await?;
-    
+
     let mut unique_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     for agent in response.agents {
         unique_names.insert(agent.name);
     }
-    
+
     let mut names: Vec<String> = unique_names.into_iter().collect();
     names.sort();
     Ok(names)
@@ -401,22 +417,22 @@ async fn get_unique_agent_names(client: &ApiClient) -> CarpResult<Vec<String>> {
 /// Get versions for a specific agent
 async fn get_agent_versions(client: &ApiClient, agent_name: &str) -> CarpResult<Vec<String>> {
     let response = client.search(agent_name, Some(1000), true).await?;
-    
-    let mut versions: Vec<String> = response.agents
+
+    let mut versions: Vec<String> = response
+        .agents
         .into_iter()
         .filter(|agent| agent.name == agent_name)
         .map(|agent| agent.version)
         .collect();
-    
+
     // Sort versions in descending order (latest first)
     versions.sort_by(|a, b| {
         // Simple lexicographic comparison for now - could be improved with proper semver
         b.cmp(a)
     });
-    
+
     Ok(versions)
 }
-
 
 /// Display agent definition information
 fn display_agent_definition(agent: &crate::api::types::Agent) {
@@ -425,19 +441,19 @@ fn display_agent_definition(agent: &crate::api::types::Agent) {
     println!("  {}: {}", "Version".bold(), agent.version);
     println!("  {}: {}", "Author".bold(), agent.author.green());
     println!("  {}: {}", "Description".bold(), agent.description);
-    
+
     if let Some(homepage) = &agent.homepage {
         println!("  {}: {}", "Homepage".bold(), homepage.cyan());
     }
-    
+
     if let Some(repository) = &agent.repository {
         println!("  {}: {}", "Repository".bold(), repository.cyan());
     }
-    
+
     if let Some(license) = &agent.license {
         println!("  {}: {}", "License".bold(), license);
     }
-    
+
     if !agent.tags.is_empty() {
         print!("  {}: ", "Tags".bold());
         for (i, tag) in agent.tags.iter().enumerate() {
@@ -448,18 +464,30 @@ fn display_agent_definition(agent: &crate::api::types::Agent) {
         }
         println!();
     }
-    
-    println!("  {}: {}", "Downloads".bold(), agent.download_count.to_string().cyan());
-    println!("  {}: {}", "Created".bold(), agent.created_at.format("%Y-%m-%d %H:%M UTC"));
-    println!("  {}: {}", "Updated".bold(), agent.updated_at.format("%Y-%m-%d %H:%M UTC"));
-    
+
+    println!(
+        "  {}: {}",
+        "Downloads".bold(),
+        agent.download_count.to_string().cyan()
+    );
+    println!(
+        "  {}: {}",
+        "Created".bold(),
+        agent.created_at.format("%Y-%m-%d %H:%M UTC")
+    );
+    println!(
+        "  {}: {}",
+        "Updated".bold(),
+        agent.updated_at.format("%Y-%m-%d %H:%M UTC")
+    );
+
     if let Some(readme) = &agent.readme {
         if !readme.trim().is_empty() {
             println!("\n{}", "README:".bold().underline());
             println!("{readme}");
         }
     }
-    
+
     println!();
 }
 
@@ -516,55 +544,57 @@ mod tests {
         // Test case 1: Existing directory should append agent name
         let existing_dir = temp_path.join("existing");
         fs::create_dir(&existing_dir).unwrap();
-        
+
         // Mock the logic from determine_output_file for directory handling
         let agent_name = "test-agent";
         let file_path = existing_dir.to_string_lossy().to_string();
         let path = expand_tilde(&file_path);
-        
+
         let result = if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
             path.join(format!("{agent_name}.md"))
         } else {
             path
         };
-        
+
         assert_eq!(result, existing_dir.join("test-agent.md"));
 
         // Test case 2: Path ending with '/' should append agent name
         let dir_with_slash = format!("{}/", temp_path.join("nonexistent").to_string_lossy());
         let path = expand_tilde(&dir_with_slash);
-        
-        let result = if path.is_dir() || dir_with_slash.ends_with('/') || dir_with_slash.ends_with('\\') {
-            path.join(format!("{agent_name}.md"))
-        } else {
-            path
-        };
-        
+
+        let result =
+            if path.is_dir() || dir_with_slash.ends_with('/') || dir_with_slash.ends_with('\\') {
+                path.join(format!("{agent_name}.md"))
+            } else {
+                path
+            };
+
         assert_eq!(result, temp_path.join("nonexistent").join("test-agent.md"));
 
         // Test case 3: Regular file path should be returned as-is
         let file_path = temp_path.join("agent.md").to_string_lossy().to_string();
         let path = expand_tilde(&file_path);
-        
+
         let result = if path.is_dir() || file_path.ends_with('/') || file_path.ends_with('\\') {
             path.join(format!("{agent_name}.md"))
         } else {
             path
         };
-        
+
         assert_eq!(result, temp_path.join("agent.md"));
 
         // Test case 4: Tilde expansion with directory should work
         if let Some(home_dir) = dirs::home_dir() {
             let tilde_path = "~/.claude/agents/";
             let path = expand_tilde(tilde_path);
-            
-            let result = if path.is_dir() || tilde_path.ends_with('/') || tilde_path.ends_with('\\') {
+
+            let result = if path.is_dir() || tilde_path.ends_with('/') || tilde_path.ends_with('\\')
+            {
                 path.join(format!("{agent_name}.md"))
             } else {
                 path
             };
-            
+
             assert_eq!(result, home_dir.join(".claude/agents/test-agent.md"));
         }
     }

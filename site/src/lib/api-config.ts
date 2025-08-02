@@ -38,6 +38,8 @@ export const getApiBaseUrl = (): string => {
 // API endpoints
 export const API_ENDPOINTS = {
   API_KEYS: '/api/v1/auth/api-keys',
+  LATEST_AGENTS: '/api/v1/agents/latest',
+  TRENDING_AGENTS: '/api/v1/agents/trending',
 } as const;
 
 /**
