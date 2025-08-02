@@ -10,7 +10,16 @@ export interface OptimizedAgent {
   created_at: string;
   updated_at: string;
   download_count: number;
+  view_count: number;
   tags: string[] | null;
+  definition: Record<string, unknown> | null;
+  user_id: string;
+  profiles?: {
+    user_id: string;
+    github_username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
 }
 
 export interface OptimizedAgentsResponse {
@@ -44,18 +53,18 @@ const convertOptimizedAgent = (optimizedAgent: OptimizedAgent): Agent => {
   id: `${optimizedAgent.name}-${optimizedAgent.current_version}`, // Generate ID from name+version
   name: optimizedAgent.name,
   description: optimizedAgent.description,
-  definition: { version: optimizedAgent.current_version }, // Store version in definition
+  definition: optimizedAgent.definition || { version: optimizedAgent.current_version }, // Use actual definition or fallback
   tags: optimizedAgent.tags,
-  view_count: optimizedAgent.download_count, // Map download_count to view_count
+  view_count: optimizedAgent.view_count, // Use actual view_count from API
   created_at: optimizedAgent.created_at,
   updated_at: optimizedAgent.updated_at,
-  user_id: '', // Not available in optimized response
+  user_id: optimizedAgent.user_id || '', // Use actual user_id
   is_public: true, // Assume public since it's in the public API
-  profiles: optimizedAgent.author_name ? {
+  profiles: optimizedAgent.profiles || (optimizedAgent.author_name ? {
     github_username: null,
     display_name: optimizedAgent.author_name,
     avatar_url: null,
-  } : null,
+  } : null),
   };
 };
 

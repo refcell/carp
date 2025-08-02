@@ -26,6 +26,8 @@ pub struct Agent {
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub download_count: u64,
+    #[serde(default)]
+    pub view_count: u64,
     pub tags: Option<Vec<String>>,
     pub definition: Option<serde_json::Value>,
     pub user_id: String,
@@ -125,7 +127,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     // Try materialized view first for optimal performance
     let response = client
         .from("trending_agents_mv")
-        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition,user_id")
+        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
         .order("view_count.desc") // Order by view count as fallback
         .limit(limit)
         .execute()
@@ -144,7 +146,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
                 Some(
                     client
                         .from("trending_agents_mv")
-                        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition,user_id")
+                        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
                         .order("view_count.desc")
                         .limit(limit)
                         .execute()
@@ -163,7 +165,7 @@ async fn get_trending_agents(limit: usize) -> Result<Vec<Agent>, Error> {
             eprintln!("Falling back to regular agents table for trending query");
             client
                 .from("agents")
-                .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition,user_id")
+                .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
                 .gte("view_count", "1")
                 .order("view_count.desc,updated_at.desc")
                 .limit(limit)

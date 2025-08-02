@@ -25,6 +25,8 @@ pub struct Agent {
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub download_count: u64,
+    #[serde(default)]
+    pub view_count: u64,
     pub tags: Option<Vec<String>>,
     pub definition: Option<serde_json::Value>,
     pub user_id: String,
@@ -137,7 +139,7 @@ async fn get_latest_agents(limit: usize) -> Result<Vec<Agent>, Error> {
     
     let response = client
         .from("agents")
-        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,definition,user_id")
+        .select("name,description,created_at,updated_at,tags,author_name,current_version,download_count,view_count,definition,user_id")
         .order("created_at.desc") // Uses idx_agents_public_created index
         .limit(limit)
         .execute()

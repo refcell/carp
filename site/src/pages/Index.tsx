@@ -242,15 +242,15 @@ const Index = () => {
                       </CardTitle>
                       <CardDescription>Most viewed agents</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden">
+                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden p-6">
                       {loading ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           {Array.from({ length: 6 }).map((_, i) => (
                             <div key={i} className="h-20 bg-muted rounded animate-pulse" />
                           ))}
                         </div>
                       ) : topAgents.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:h-full lg:overflow-y-auto pr-2 lg:min-h-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-full lg:overflow-y-auto pr-2 lg:min-h-0">
                           {topAgents.map((agent) => (
                             <AgentCard
                               key={agent.id}
@@ -278,15 +278,15 @@ const Index = () => {
                   </CardTitle>
                   <CardDescription>Recently published</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 flex-1 flex flex-col lg:min-h-0">
+                <CardContent className="flex-1 flex flex-col lg:min-h-0 p-6">
                   {loading ? (
-                    <div className="space-y-4">
+                    <div className="flex flex-col gap-6">
                       {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="h-20 bg-muted rounded animate-pulse" />
                       ))}
                     </div>
                   ) : latestAgents.length > 0 ? (
-                    <div className="space-y-4 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
+                    <div className="flex flex-col gap-6 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
                       {latestAgents.slice(0, 6).map((agent) => (
                         <AgentCard
                           key={agent.id}
