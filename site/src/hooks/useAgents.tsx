@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
@@ -22,154 +23,95 @@ export interface Agent {
 
 export function useAgents() {
   const [searchResults, setSearchResults] = useState<Agent[]>([]);
-  const [allAgents, setAllAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Optimized agents fetching with JOIN to eliminate N+1 queries
+  const fetchAgentsWithProfiles = useCallback(async (search?: string, limit?: number, offset?: number) => {
+    let query = supabase
+      .from('agents')
+      .select('*')
+      .eq('is_public', true)
+      .order('created_at', { ascending: false });
+
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
+    }
+
+    if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+
+    if (offset !== undefined) {
+      query = query.range(offset, offset + (limit || 20) - 1);
+    }
+
+    const { data: agents, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching agents:', error);
+      throw error;
+    }
+
+    // If we have agents, fetch their profiles
+    if (agents && agents.length > 0) {
+      const userIds = [...new Set(agents.map(a => a.user_id))].filter(Boolean);
+      
+      if (userIds.length > 0) {
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('user_id, github_username, display_name, avatar_url')
+          .in('user_id', userIds);
+        
+        if (!profileError && profiles) {
+          // Create a map for quick lookup
+          const profileMap = new Map(profiles.map(p => [p.user_id, p]));
+          
+          // Attach profiles to agents
+          return agents.map(agent => ({
+            ...agent,
+            profiles: profileMap.get(agent.user_id) || null
+          })) as Agent[];
+        }
+      }
+    }
+
+    return agents as Agent[];
+  }, []);
 
   const fetchAgents = useCallback(async (search?: string, limit?: number, offset?: number) => {
     if (search && search.trim()) {
       setSearchLoading(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      let query = supabase
-        .from('agents')
-        .select('*')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false });
-
-      if (search && search.trim()) {
-        const searchTerm = search.trim();
-        query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
-      }
-
-      if (limit !== undefined) {
-        query = query.limit(limit);
-      }
-
-      if (offset !== undefined) {
-        query = query.range(offset, offset + (limit || 20) - 1);
-      }
-
-      const { data, error } = await query;
-      
-      if (!error && data) {
-        // Fetch profile data for each agent if needed
-        const agentsWithProfiles = await Promise.all(
-          data.map(async (agent: Agent) => {
-            try {
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('github_username, display_name, avatar_url')
-                .eq('user_id', agent.user_id)
-                .single();
-              
-              return {
-                ...agent,
-                profiles: profile || null
-              };
-            } catch {
-              return {
-                ...agent,
-                profiles: null
-              };
-            }
-          })
-        );
-        
-        const typedAgents = agentsWithProfiles as Agent[];
-        if (search && search.trim()) {
-          setSearchResults(typedAgents);
-        } else {
-          setAllAgents(typedAgents);
-        }
-      } else if (error) {
-        console.error('Error fetching agents:', error);
-        if (search && search.trim()) {
-          setSearchResults([]);
-        } else {
-          setAllAgents([]);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching agents:', error);
-      if (search && search.trim()) {
+      try {
+        const agents = await fetchAgentsWithProfiles(search, limit, offset);
+        setSearchResults(agents);
+      } catch (error) {
+        console.error('Search error:', error);
         setSearchResults([]);
-      } else {
-        setAllAgents([]);
-      }
-    } finally {
-      if (search && search.trim()) {
+      } finally {
         setSearchLoading(false);
-      } else {
-        setLoading(false);
       }
     }
-  }, []);
+  }, [fetchAgentsWithProfiles]);
 
   const fetchAgentsPaginated = useCallback(async (limit: number = 20, offset: number = 0, search?: string) => {
     try {
-      let query = supabase
-        .from('agents')
-        .select('*')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false });
-
-      if (search && search.trim()) {
-        const searchTerm = search.trim();
-        query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,tags.cs.{${searchTerm}}`);
-      }
-
       // Fetch one extra item to check if there are more
-      query = query.range(offset, offset + limit);
-
-      const { data, error } = await query;
+      const agents = await fetchAgentsWithProfiles(search, limit + 1, offset);
       
-      if (error) {
-        console.error('Error fetching paginated agents:', error);
-        return { agents: [], hasMore: false };
-      }
-
-      if (!data) {
-        return { agents: [], hasMore: false };
-      }
-
       // Check if we have more items by comparing with the expected limit + 1
-      const hasMore = data.length === limit + 1;
-      const actualData = hasMore ? data.slice(0, limit) : data;
-
-      // Fetch profile data for each agent
-      const agentsWithProfiles = await Promise.all(
-        actualData.map(async (agent: Agent) => {
-          try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('github_username, display_name, avatar_url')
-              .eq('user_id', agent.user_id)
-              .single();
-            
-            return {
-              ...agent,
-              profiles: profile || null
-            };
-          } catch {
-            return {
-              ...agent,
-              profiles: null
-            };
-          }
-        })
-      );
+      const hasMore = agents.length === limit + 1;
+      const actualData = hasMore ? agents.slice(0, limit) : agents;
       
-      return { agents: agentsWithProfiles as Agent[], hasMore };
+      return { agents: actualData, hasMore };
     } catch (error) {
       console.error('Error fetching paginated agents:', error);
       return { agents: [], hasMore: false };
     }
-  }, []);
+  }, [fetchAgentsWithProfiles]);
 
   const fetchUserAgents = async () => {
     if (!user) return [];
@@ -195,81 +137,66 @@ export function useAgents() {
   };
 
   const incrementViewCount = async (agentId: string) => {
-    console.log(`🔍 Incrementing view count for agent: ${agentId}`);
+    console.log(`🔍 [useAgents] Incrementing view count for agent: ${agentId}`);
     
-    // First update local state optimistically
-    setAgents(prevAgents => 
-      prevAgents.map(agent => 
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!agentId || !uuidRegex.test(agentId)) {
+      console.error('❌ [useAgents] Invalid UUID format:', agentId);
+      return;
+    }
+    
+    // Store original data for rollback
+    const originalData = queryClient.getQueryData(['agents', 'all']) as Agent[];
+    
+    // Optimistically update React Query cache
+    queryClient.setQueryData(['agents', 'all'], (oldData: Agent[] = []) => {
+      const updated = oldData.map(agent => 
         agent.id === agentId 
           ? { ...agent, view_count: agent.view_count + 1 }
           : agent
-      )
-    );
+      );
+      console.log(`📊 [useAgents] Optimistically updated cache: ${updated.find(a => a.id === agentId)?.view_count} views`);
+      return updated;
+    });
 
-    // Then update the database using a more reliable approach
+    // Update the database
     try {
-      console.log('📡 Updating database...');
+      console.log('📡 [useAgents] Calling database RPC with UUID:', agentId);
       
-      // Use PostgreSQL's atomic increment instead of read-then-write
+      // Use PostgreSQL's atomic increment function
       const { data, error } = await supabase.rpc('increment_view_count', {
         agent_id: agentId
       });
 
       if (error) {
-        console.error('❌ Database RPC error:', error);
+        console.error('❌ [useAgents] Database RPC error:', error);
+        console.error('❌ [useAgents] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
 
-      console.log('✅ Database updated successfully');
+      const newViewCount = data?.[0]?.new_view_count;
+      console.log(`✅ [useAgents] Database updated successfully! New count: ${newViewCount}`);
+      
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      
       return data;
     } catch (error) {
-      console.error('❌ Error incrementing view count:', error);
+      console.error('❌ [useAgents] Error incrementing view count:', error);
       
-      // Fallback to manual update if RPC doesn't exist
-      try {
-        console.log('🔄 Trying fallback database update...');
-        
-        const { data: currentAgent, error: fetchError } = await supabase
-          .from('agents')
-          .select('view_count')
-          .eq('id', agentId)
-          .single();
-        
-        if (fetchError) {
-          console.error('❌ Error fetching current agent:', fetchError);
-          throw fetchError;
-        }
-
-        console.log(`📊 Current view count in DB: ${currentAgent.view_count}`);
-        
-        const { data: updatedAgent, error: updateError } = await supabase
-          .from('agents')
-          .update({ view_count: currentAgent.view_count + 1 })
-          .eq('id', agentId)
-          .select('view_count')
-          .single();
-        
-        if (updateError) {
-          console.error('❌ Error updating view count:', updateError);
-          throw updateError;
-        }
-
-        console.log(`✅ Fallback update successful, new count: ${updatedAgent.view_count}`);
-        return updatedAgent;
-        
-      } catch (fallbackError) {
-        console.error('❌ Fallback update also failed:', fallbackError);
-        
-        // Revert optimistic update on error
-        setAgents(prevAgents => 
-          prevAgents.map(agent => 
-            agent.id === agentId 
-              ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
-              : agent
-          )
-        );
-        throw fallbackError;
+      // Revert optimistic update on error
+      if (originalData) {
+        console.log('🔄 [useAgents] Reverting optimistic update...');
+        queryClient.setQueryData(['agents', 'all'], originalData);
       }
+      
+      throw error;
     }
   };
 
@@ -318,7 +245,20 @@ export function useAgents() {
     if (error) throw error;
   };
 
-  // Debounced search effect
+  // Use React Query for caching and optimized data fetching
+  const {
+    data: allAgents = [],
+    isLoading: loading,
+    error: agentsError
+  } = useQuery({
+    queryKey: ['agents', 'all'],
+    queryFn: () => fetchAgentsWithProfiles(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false
+  });
+
+  // Debounced search effect with cleanup
   useEffect(() => {
     if (!searchQuery || !searchQuery.trim()) {
       setSearchResults([]);
@@ -328,17 +268,13 @@ export function useAgents() {
 
     const timeoutId = setTimeout(() => {
       fetchAgents(searchQuery);
-    }, 200); // Reduced debounce for more responsiveness
+    }, 300); // Slightly increased debounce to reduce API calls
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery, fetchAgents]);
 
-  // Initial load and real-time subscription
+  // Optimized real-time subscription - only invalidate cache instead of refetching
   useEffect(() => {
-    // Initial fetch
-    fetchAgents();
-
-    // Set up real-time subscription for new agents
     const channel = supabase
       .channel('agents_changes')
       .on(
@@ -350,10 +286,8 @@ export function useAgents() {
           filter: 'is_public=eq.true'
         },
         () => {
-          // Use a slight delay to ensure database consistency
-          setTimeout(() => {
-            fetchAgents(); // Only refresh all agents, not search
-          }, 100);
+          // Invalidate cache to trigger background refetch
+          queryClient.invalidateQueries({ queryKey: ['agents', 'all'] });
         }
       )
       .subscribe();
@@ -361,27 +295,41 @@ export function useAgents() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchAgents]); // Remove searchQuery dependency to avoid conflicts
+  }, [queryClient]);
 
-  // Dashboard sections always use allAgents (never affected by search)
-  const trendingAgents = allAgents
-    .sort((a, b) => b.view_count - a.view_count)
-    .slice(0, 5);
+  // Memoized dashboard sections to prevent unnecessary re-computations
+  const trendingAgents = useMemo(() => 
+    allAgents
+      .filter(agent => agent.view_count > 0) // Only show agents with views
+      .sort((a, b) => b.view_count - a.view_count)
+      .slice(0, 5),
+    [allAgents]
+  );
 
-  const latestAgents = allAgents
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 10);
+  const latestAgents = useMemo(() => 
+    allAgents
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 10),
+    [allAgents]
+  );
 
-  const topAgents = allAgents
-    .sort((a, b) => b.view_count - a.view_count)
-    .slice(0, 10);
+  const topAgents = useMemo(() => 
+    allAgents
+      .filter(agent => agent.view_count > 0) // Only show agents with views
+      .sort((a, b) => b.view_count - a.view_count)
+      .slice(0, 10),
+    [allAgents]
+  );
 
   // Search results are separate
   const agents = searchQuery ? searchResults : allAgents;
 
   const refreshAgents = useCallback(() => {
-    fetchAgents(searchQuery);
-  }, [fetchAgents, searchQuery]);
+    queryClient.invalidateQueries({ queryKey: ['agents', 'all'] });
+    if (searchQuery) {
+      fetchAgents(searchQuery);
+    }
+  }, [queryClient, searchQuery, fetchAgents]);
 
   return {
     agents,

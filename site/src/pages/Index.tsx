@@ -1,105 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useAgents } from '@/hooks/useAgents';
+import { useLatestAgents, useTrendingAgents, useIncrementViewCount, Agent } from '@/hooks/useOptimizedAgents';
+import { useStats } from '@/hooks/useStats';
 import { SearchBar } from '@/components/SearchBar';
 import { AgentCard } from '@/components/AgentCard';
 import { TrendingModal } from '@/components/TrendingModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TrendingUp, Clock, Star, Sparkles, Search, BarChart3, Users, Trophy } from 'lucide-react';
-import { Agent } from '@/hooks/useAgents';
-import { supabase } from '@/integrations/supabase/client';
-
-interface UserStats {
-  github_username: string | null;
-  display_name: string | null;
-  avatar_url: string | null;
-  agent_count: number;
-}
 
 const Index = () => {
+  // Use the original useAgents hook for search functionality
   const {
-    agents,
-    loading,
-    searchLoading,
+    agents: searchAgents,
+    loading: searchLoading,
     searchQuery,
-    setSearchQuery,
-    trendingAgents,
-    latestAgents,
-    topAgents,
-    incrementViewCount
+    setSearchQuery
   } = useAgents();
+
+  // Use the optimized increment view count hook
+  const { incrementViewCount } = useIncrementViewCount();
+
+  // Use optimized hooks for latest and trending agents
+  const { data: latestAgents = [], isLoading: latestLoading, error: latestError } = useLatestAgents(10);
+  const { data: trendingAgents = [], isLoading: trendingLoading, error: trendingError } = useTrendingAgents(5);
+
+  // Derive loading states
+  const loading = latestLoading || trendingLoading;
+
+  // For search results, use the search agents
+  const agents = searchQuery ? searchAgents : [];
+
+  // Create topAgents from trendingAgents for compatibility
+  const topAgents = useMemo(() => trendingAgents.slice(0, 10), [trendingAgents]);
 
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [showTrendingModal, setShowTrendingModal] = useState(false);
-  const [totalAgentCount, setTotalAgentCount] = useState(0);
-  const [userLeaderboard, setUserLeaderboard] = useState<UserStats[]>([]);
-  const [loadingStats, setLoadingStats] = useState(true);
+  // Use the optimized stats hook
+  const { data: statsData, isLoading: loadingStats } = useStats();
+  const totalAgentCount = statsData?.totalAgentCount || 0;
+  const userLeaderboard = statsData?.userLeaderboard || [];
 
-  const featuredAgent = trendingAgents[0];
 
-  const handleAgentClick = (agent: Agent) => {
+  const handleAgentClick = useCallback((agent: Agent) => {
+    console.log(`📝 [Index] Agent clicked: ${agent.name} (${agent.id})`);
+    console.log(`📊 [Index] Current view count: ${agent.view_count}`);
     setSelectedAgent(agent);
     setShowTrendingModal(true);
-  };
-
-  // Fetch total agent count and user leaderboard
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        // Get total agent count
-        const { count } = await supabase
-          .from('agents')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_public', true);
-
-        setTotalAgentCount(count || 0);
-
-        // Get user leaderboard
-        const { data: leaderboardData, error } = await supabase
-          .from('profiles')
-          .select(`
-            github_username,
-            display_name,
-            avatar_url,
-            user_id
-          `);
-
-        if (leaderboardData && !error) {
-          // Count agents for each user
-          const userStatsPromises = leaderboardData.map(async (profile) => {
-            const { count: agentCount } = await supabase
-              .from('agents')
-              .select('*', { count: 'exact', head: true })
-              .eq('user_id', profile.user_id)
-              .eq('is_public', true);
-
-            return {
-              github_username: profile.github_username,
-              display_name: profile.display_name,
-              avatar_url: profile.avatar_url,
-              agent_count: agentCount || 0
-            };
-          });
-
-          const userStats = await Promise.all(userStatsPromises);
-          // Sort by agent count and take top 10
-          const sortedStats = userStats
-            .filter(stat => stat.agent_count > 0)
-            .sort((a, b) => b.agent_count - a.agent_count)
-            .slice(0, 10);
-
-          setUserLeaderboard(sortedStats);
-        }
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-
-    fetchStats();
   }, []);
+
+  const handleModalClose = useCallback(() => {
+    setShowTrendingModal(false);
+    setSelectedAgent(null);
+  }, []);
+
+  // Memoize the featured agent to prevent unnecessary re-renders
+  const featuredAgent = useMemo(() => trendingAgents[0], [trendingAgents]);
+
+  // Log any errors for debugging
+  if (latestError) {
+    console.error('[Index] Latest agents error:', latestError);
+  }
+  if (trendingError) {
+    console.error('[Index] Trending agents error:', trendingError);
+  }
 
   return (
           <div className="grid px-8 flex-grow mx-auto mb-8 mt-12 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-200px)]">
@@ -123,7 +87,7 @@ const Index = () => {
                   <CardContent className="p-2 lg:p-3">
                     <div className="text-center">
                       <Users className="w-4 h-4 lg:w-5 lg:h-5 mx-auto mb-1 text-primary" />
-                      <p className="text-base lg:text-lg font-bold">{userLeaderboard.length}</p>
+                      <p className="text-base lg:text-lg font-bold">{statsData?.totalUserCount || 0}</p>
                       <p className="text-xs text-muted-foreground">Users</p>
                     </div>
                   </CardContent>
@@ -206,9 +170,11 @@ const Index = () => {
                     ) : agents.length > 0 ? (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {agents.map((agent) => (
-                          <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                            <AgentCard agent={agent} />
-                          </div>
+                          <AgentCard
+                            key={agent.id}
+                            agent={agent}
+                            onClick={() => handleAgentClick(agent)}
+                          />
                         ))}
                       </div>
                     ) : (
@@ -276,23 +242,25 @@ const Index = () => {
                     <CardHeader className="flex-shrink-0">
                       <CardTitle className="flex items-center space-x-2">
                         <Star className="w-5 h-5" />
-                        <span>Top Rated</span>
+                        <span>Trending</span>
                       </CardTitle>
                       <CardDescription>Most viewed agents</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden">
+                    <CardContent className="flex-1 lg:min-h-0 lg:overflow-hidden px-6 pb-6">
                       {loading ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           {Array.from({ length: 6 }).map((_, i) => (
                             <div key={i} className="h-20 bg-muted rounded animate-pulse" />
                           ))}
                         </div>
                       ) : topAgents.length > 0 ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:h-full lg:overflow-y-auto pr-2 lg:min-h-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:overflow-y-auto pr-2">
                           {topAgents.map((agent) => (
-                            <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                              <AgentCard agent={agent} />
-                            </div>
+                            <AgentCard
+                              key={agent.id}
+                              agent={agent}
+                              onClick={() => handleAgentClick(agent)}
+                            />
                           ))}
                         </div>
                       ) : (
@@ -314,19 +282,21 @@ const Index = () => {
                   </CardTitle>
                   <CardDescription>Recently published</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 flex-1 flex flex-col lg:min-h-0">
+                <CardContent className="flex-1 flex flex-col lg:min-h-0 px-6 pb-6">
                   {loading ? (
-                    <div className="space-y-4">
+                    <div className="flex flex-col gap-6">
                       {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="h-20 bg-muted rounded animate-pulse" />
                       ))}
                     </div>
                   ) : latestAgents.length > 0 ? (
-                    <div className="space-y-4 flex-1 overflow-y-auto max-h-96 lg:max-h-none lg:min-h-0">
+                    <div className="flex flex-col gap-6 overflow-y-auto max-h-96 lg:max-h-none">
                       {latestAgents.slice(0, 6).map((agent) => (
-                        <div key={agent.id} className="cursor-pointer" onClick={() => handleAgentClick(agent)}>
-                          <AgentCard agent={agent} />
-                        </div>
+                        <AgentCard
+                          key={agent.id}
+                          agent={agent}
+                          onClick={() => handleAgentClick(agent)}
+                        />
                       ))}
                     </div>
                   ) : (
@@ -339,11 +309,15 @@ const Index = () => {
           <TrendingModal
             agent={selectedAgent}
             open={showTrendingModal}
-            onClose={() => {
-              setShowTrendingModal(false);
-              setSelectedAgent(null);
+            onClose={handleModalClose}
+            onViewIncrement={(agentId: string) => {
+              console.log(`🚀 [Index] TrendingModal requesting view increment for: ${agentId}`);
+              try {
+                incrementViewCount(agentId);
+              } catch (error) {
+                console.error('❌ [Index] Error in view increment:', error);
+              }
             }}
-            onViewIncrement={incrementViewCount}
           />
         </div>
   );

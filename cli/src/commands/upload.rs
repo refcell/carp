@@ -32,19 +32,25 @@ pub async fn execute(
 ) -> CarpResult<()> {
     // Load config first to get stored API key
     let config = ConfigManager::load_with_env_checks()?;
-    
+
     if verbose {
         println!("DEBUG: Runtime API key present: {}", api_key.is_some());
-        println!("DEBUG: Stored API key present: {}", config.api_key.is_some());
+        println!(
+            "DEBUG: Stored API key present: {}",
+            config.api_key.is_some()
+        );
     }
-    
+
     // Use runtime API key if provided, otherwise use stored API key
     let effective_api_key = api_key.as_deref().or(config.api_key.as_deref());
-    
+
     if verbose {
-        println!("DEBUG: Effective API key present: {}", effective_api_key.is_some());
+        println!(
+            "DEBUG: Effective API key present: {}",
+            effective_api_key.is_some()
+        );
     }
-    
+
     // Ensure user is authenticated (either via API key parameter or stored configuration)
     AuthManager::ensure_authenticated(effective_api_key).await?;
 
@@ -112,7 +118,15 @@ pub async fn execute(
 
                 match fs::read_to_string(&agent.path) {
                     Ok(agent_content) => {
-                        match upload_agent(&agent, agent_content, effective_api_key, verbose, &config).await {
+                        match upload_agent(
+                            &agent,
+                            agent_content,
+                            effective_api_key,
+                            verbose,
+                            &config,
+                        )
+                        .await
+                        {
                             Ok(_) => {
                                 println!(
                                     "{} Successfully uploaded agent '{}'",
@@ -148,7 +162,11 @@ pub async fn execute(
                 "\n{} Upload complete: {} successful, {} failed",
                 "✓".green().bold(),
                 successful.to_string().green().bold(),
-                if failed > 0 { failed.to_string().red().bold() } else { failed.to_string().green().bold() }
+                if failed > 0 {
+                    failed.to_string().red().bold()
+                } else {
+                    failed.to_string().green().bold()
+                }
             );
         }
     }
@@ -165,25 +183,25 @@ fn get_directory_path(directory: Option<String>, verbose: bool) -> CarpResult<Pa
         // Prompt user for directory
         let default_dir = "~/.claude/agents/";
         let prompt_text = format!("Enter directory to scan for agents (default: {default_dir}):");
-        
+
         let input = inquire::Text::new(&prompt_text)
             .with_default(default_dir)
             .prompt()
             .map_err(|e| CarpError::Other(format!("Input cancelled: {e}")))?;
-        
+
         let input = if input.trim().is_empty() {
             default_dir.to_string()
         } else {
             input
         };
-        
+
         expand_directory_path(Some(input))?
     };
-    
+
     if verbose {
         println!("Using directory: {}", dir_path.display());
     }
-    
+
     Ok(dir_path)
 }
 
@@ -243,12 +261,7 @@ fn scan_agent_files(dir_path: &Path, verbose: bool) -> CarpResult<Vec<AgentFile>
                         }
                         Err(e) => {
                             if verbose {
-                                println!(
-                                    "  {} Skipping {}: {}",
-                                    "⚠".yellow(),
-                                    path.display(),
-                                    e
-                                );
+                                println!("  {} Skipping {}: {}", "⚠".yellow(), path.display(), e);
                             }
                         }
                     }
@@ -278,7 +291,7 @@ fn extract_field_as_string(frontmatter: &serde_json::Value, field: &str) -> Opti
                         _ => item.to_string(),
                     })
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", "),
             )
         }
         serde_json::Value::Object(_) => {
@@ -315,7 +328,10 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
 
     let frontmatter_end = frontmatter_end.ok_or_else(|| {
         if verbose {
-            eprintln!("Could not find closing frontmatter boundary in {}", path.display());
+            eprintln!(
+                "Could not find closing frontmatter boundary in {}",
+                path.display()
+            );
             eprintln!("Looking for '---' or '...' after opening '---'");
         }
         CarpError::ManifestError("Invalid YAML frontmatter: missing closing --- or ...".to_string())
@@ -326,8 +342,8 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
     let frontmatter_content = frontmatter_lines.join("\n");
 
     // Parse YAML frontmatter with better error handling
-    let frontmatter: serde_json::Value = serde_yaml::from_str(&frontmatter_content)
-        .map_err(|e| {
+    let frontmatter: serde_json::Value =
+        serde_yaml::from_str(&frontmatter_content).map_err(|e| {
             if verbose {
                 eprintln!("YAML parsing failed for {}: {}", path.display(), e);
                 eprintln!("Frontmatter content:\n{frontmatter_content}");
@@ -336,13 +352,13 @@ fn parse_agent_file(path: &Path, verbose: bool) -> CarpResult<AgentFile> {
         })?;
 
     // Extract name and description with more flexible handling
-    let name = extract_field_as_string(&frontmatter, "name")
-        .ok_or_else(|| CarpError::ManifestError("Missing 'name' field in frontmatter".to_string()))?;
+    let name = extract_field_as_string(&frontmatter, "name").ok_or_else(|| {
+        CarpError::ManifestError("Missing 'name' field in frontmatter".to_string())
+    })?;
 
-    let description = extract_field_as_string(&frontmatter, "description")
-        .ok_or_else(|| {
-            CarpError::ManifestError("Missing 'description' field in frontmatter".to_string())
-        })?;
+    let description = extract_field_as_string(&frontmatter, "description").ok_or_else(|| {
+        CarpError::ManifestError("Missing 'description' field in frontmatter".to_string())
+    })?;
 
     // Create display name for selection
     let file_name = path
@@ -395,7 +411,7 @@ fn select_agents(agents: Vec<AgentFile>) -> CarpResult<AgentSelection> {
             .into_iter()
             .find(|a| a.display_name == selection)
             .ok_or_else(|| CarpError::Other("Selected agent not found".to_string()))?;
-        
+
         Ok(AgentSelection::Single(selected_agent))
     }
 }
@@ -424,7 +440,7 @@ async fn upload_agent(
         license: Some("MIT".to_string()), // Default license
     };
 
-    // Upload to registry  
+    // Upload to registry
     let client = ApiClient::new(config)?.with_api_key(api_key.map(|s| s.to_string()));
 
     if verbose {
