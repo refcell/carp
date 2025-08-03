@@ -137,81 +137,66 @@ export function useAgents() {
   };
 
   const incrementViewCount = async (agentId: string) => {
-    console.log(`🔍 Incrementing view count for agent: ${agentId}`);
+    console.log(`🔍 [useAgents] Incrementing view count for agent: ${agentId}`);
+    
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!agentId || !uuidRegex.test(agentId)) {
+      console.error('❌ [useAgents] Invalid UUID format:', agentId);
+      return;
+    }
+    
+    // Store original data for rollback
+    const originalData = queryClient.getQueryData(['agents', 'all']) as Agent[];
     
     // Optimistically update React Query cache
-    queryClient.setQueryData(['agents', 'all'], (oldData: Agent[] = []) => 
-      oldData.map(agent => 
+    queryClient.setQueryData(['agents', 'all'], (oldData: Agent[] = []) => {
+      const updated = oldData.map(agent => 
         agent.id === agentId 
           ? { ...agent, view_count: agent.view_count + 1 }
           : agent
-      )
-    );
+      );
+      console.log(`📊 [useAgents] Optimistically updated cache: ${updated.find(a => a.id === agentId)?.view_count} views`);
+      return updated;
+    });
 
-    // Then update the database using a more reliable approach
+    // Update the database
     try {
-      console.log('📡 Updating database...');
+      console.log('📡 [useAgents] Calling database RPC with UUID:', agentId);
       
-      // Use PostgreSQL's atomic increment instead of read-then-write
+      // Use PostgreSQL's atomic increment function
       const { data, error } = await supabase.rpc('increment_view_count', {
         agent_id: agentId
       });
 
       if (error) {
-        console.error('❌ Database RPC error:', error);
+        console.error('❌ [useAgents] Database RPC error:', error);
+        console.error('❌ [useAgents] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
 
-      console.log('✅ Database updated successfully');
+      const newViewCount = data?.[0]?.new_view_count;
+      console.log(`✅ [useAgents] Database updated successfully! New count: ${newViewCount}`);
+      
+      // Invalidate queries to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      
       return data;
     } catch (error) {
-      console.error('❌ Error incrementing view count:', error);
+      console.error('❌ [useAgents] Error incrementing view count:', error);
       
-      // Fallback to manual update if RPC doesn't exist
-      try {
-        console.log('🔄 Trying fallback database update...');
-        
-        const { data: currentAgent, error: fetchError } = await supabase
-          .from('agents')
-          .select('view_count')
-          .eq('id', agentId)
-          .single();
-        
-        if (fetchError) {
-          console.error('❌ Error fetching current agent:', fetchError);
-          throw fetchError;
-        }
-
-        console.log(`📊 Current view count in DB: ${currentAgent.view_count}`);
-        
-        const { data: updatedAgent, error: updateError } = await supabase
-          .from('agents')
-          .update({ view_count: currentAgent.view_count + 1 })
-          .eq('id', agentId)
-          .select('view_count')
-          .single();
-        
-        if (updateError) {
-          console.error('❌ Error updating view count:', updateError);
-          throw updateError;
-        }
-
-        console.log(`✅ Fallback update successful, new count: ${updatedAgent.view_count}`);
-        return updatedAgent;
-        
-      } catch (fallbackError) {
-        console.error('❌ Fallback update also failed:', fallbackError);
-        
-        // Revert optimistic update on error
-        queryClient.setQueryData(['agents', 'all'], (oldData: Agent[] = []) => 
-          oldData.map(agent => 
-            agent.id === agentId 
-              ? { ...agent, view_count: Math.max(0, agent.view_count - 1) }
-              : agent
-          )
-        );
-        throw fallbackError;
+      // Revert optimistic update on error
+      if (originalData) {
+        console.log('🔄 [useAgents] Reverting optimistic update...');
+        queryClient.setQueryData(['agents', 'all'], originalData);
       }
+      
+      throw error;
     }
   };
 

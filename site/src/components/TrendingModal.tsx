@@ -24,6 +24,9 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
   // Track when modal opens and increment view count
   useEffect(() => {
     if (open && agent) {
+      console.log(`📝 [TrendingModal] Modal opened for agent: ${agent.name} (${agent.id})`);
+      console.log(`📊 [TrendingModal] Current view count: ${agent.view_count}`);
+      
       // Set initial view count
       if (localViewCount === null) {
         setLocalViewCount(agent.view_count);
@@ -31,15 +34,33 @@ export function TrendingModal({ agent, open, onClose, onViewIncrement }: Trendin
       
       // Increment view count if not already done
       if (onViewIncrement && !hasIncrementedRef.current) {
-        onViewIncrement(agent.id);
-        hasIncrementedRef.current = true;
-        // Optimistically increment local view count
-        setLocalViewCount(prev => (prev ?? agent.view_count) + 1);
+        console.log(`🚀 [TrendingModal] Calling onViewIncrement with UUID: ${agent.id}`);
+        
+        // Validate the agent ID before calling
+        if (!agent.id || typeof agent.id !== 'string') {
+          console.error('❌ [TrendingModal] Invalid agent ID:', agent.id);
+          return;
+        }
+        
+        try {
+          onViewIncrement(agent.id);
+          hasIncrementedRef.current = true;
+          // Optimistically increment local view count
+          setLocalViewCount(prev => (prev ?? agent.view_count) + 1);
+          console.log(`✅ [TrendingModal] View increment triggered successfully`);
+        } catch (error) {
+          console.error('❌ [TrendingModal] Error calling onViewIncrement:', error);
+        }
+      } else if (!onViewIncrement) {
+        console.warn('⚠️ [TrendingModal] No onViewIncrement callback provided');
+      } else if (hasIncrementedRef.current) {
+        console.log('🔄 [TrendingModal] View already incremented for this modal session');
       }
     }
     
     // Reset when modal closes
     if (!open) {
+      console.log('📝 [TrendingModal] Modal closed, resetting state');
       hasIncrementedRef.current = false;
       setIsDescriptionExpanded(false);
       setLocalViewCount(null);

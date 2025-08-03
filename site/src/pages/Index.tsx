@@ -43,6 +43,8 @@ const Index = () => {
 
 
   const handleAgentClick = useCallback((agent: Agent) => {
+    console.log(`📝 [Index] Agent clicked: ${agent.name} (${agent.id})`);
+    console.log(`📊 [Index] Current view count: ${agent.view_count}`);
     setSelectedAgent(agent);
     setShowTrendingModal(true);
   }, []);
@@ -308,7 +310,14 @@ const Index = () => {
             agent={selectedAgent}
             open={showTrendingModal}
             onClose={handleModalClose}
-            onViewIncrement={incrementViewCount}
+            onViewIncrement={(agentId: string) => {
+              console.log(`🚀 [Index] TrendingModal requesting view increment for: ${agentId}`);
+              try {
+                incrementViewCount(agentId);
+              } catch (error) {
+                console.error('❌ [Index] Error in view increment:', error);
+              }
+            }}
           />
         </div>
   );

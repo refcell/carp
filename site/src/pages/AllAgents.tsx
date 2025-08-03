@@ -54,20 +54,26 @@ const AllAgents = () => {
   };
 
   const handleAgentClick = (agent: Agent) => {
+    console.log(`📝 [AllAgents] Agent clicked: ${agent.name} (${agent.id})`);
+    console.log(`📊 [AllAgents] Current view count: ${agent.view_count}`);
     setSelectedAgent(agent);
     setShowTrendingModal(true);
   };
   
   // Wrap incrementViewCount to also update local state
   const handleViewIncrement = useCallback((agentId: string) => {
+    console.log(`🚀 [AllAgents] Handling view increment for: ${agentId}`);
+    
     // Update local state optimistically
-    setAgents(prevAgents => 
-      prevAgents.map(agent => 
+    setAgents(prevAgents => {
+      const updated = prevAgents.map(agent => 
         agent.id === agentId 
           ? { ...agent, view_count: agent.view_count + 1 }
           : agent
-      )
-    );
+      );
+      console.log(`📊 [AllAgents] Local state updated: ${updated.find(a => a.id === agentId)?.view_count} views`);
+      return updated;
+    });
     
     // Also update the selected agent if it matches
     setSelectedAgent(prev => 
@@ -77,7 +83,11 @@ const AllAgents = () => {
     );
     
     // Call the original incrementViewCount
-    incrementViewCount(agentId);
+    try {
+      incrementViewCount(agentId);
+    } catch (error) {
+      console.error('❌ [AllAgents] Error in incrementViewCount:', error);
+    }
   }, [incrementViewCount]);
 
   useEffect(() => {
